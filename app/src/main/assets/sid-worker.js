@@ -61,12 +61,26 @@ await init();
 
 async function makePlayer(bytes,song){
   if(player){try{player.delete()}catch(e){} player=null}
+
+  const songs=Math.max(1,(bytes[0x0e]<<8)|bytes[0x0f]);
+  const s=Math.max(0,Math.min(songs-1,song));
+
+  // First load the untouched SID to obtain the canonical HVSC MD5.
+  // Changing the start-song header before getTuneMd5() can change the lookup key.
+  const md5ctx=new module.SidPlayerContext();
+  if(!md5ctx.configure(44100,true))throw new Error(md5ctx.getLastError());
+  if(roms.kernal||roms.basic||roms.chargen){
+    if(!md5ctx.setSystemROMs(roms.kernal,roms.basic,roms.chargen))
+      throw new Error("ROM: "+md5ctx.getLastError());
+  }
+  if(!md5ctx.loadSidBuffer(bytes))throw new Error(md5ctx.getLastError());
+  const md5=(typeof md5ctx.getTuneMd5==="function" ? String(md5ctx.getTuneMd5()||"") : "").trim().toLowerCase();
+  try{md5ctx.delete()}catch(e){}
+
   player=new module.SidPlayerContext();
   if(!player.configure(44100,true))throw new Error(player.getLastError());
   if(typeof player.setEmulationConfig==="function"){
-    player.setEmulationConfig({
-      sidModel:"MOS6581", forceSidModel:false, digiBoost:true
-    });
+    player.setEmulationConfig({sidModel:"MOS6581",forceSidModel:false,digiBoost:true});
   }
   if(roms.kernal||roms.basic||roms.chargen){
     if(!player.setSystemROMs(roms.kernal,roms.basic,roms.chargen))
@@ -74,17 +88,12 @@ async function makePlayer(bytes,song){
   }
 
   const patched=bytes.slice();
-  const songs=Math.max(1,(patched[0x0e]<<8)|patched[0x0f]);
-  const s=Math.max(0,Math.min(songs-1,song));
   patched[0x10]=((s+1)>>8)&255;
   patched[0x11]=(s+1)&255;
-
   if(!player.loadSidBuffer(patched))throw new Error(player.getLastError());
-  if(typeof player.reset==="function"&&!player.reset())
-    throw new Error(player.getLastError());
+  if(typeof player.reset==="function"&&!player.reset())throw new Error(player.getLastError());
 
   channels=player.getChannels?player.getChannels():2;
-  const md5=(typeof player.getTuneMd5==="function" ? String(player.getTuneMd5()||"") : "").trim().toLowerCase();
   const lengths=songlengths.get(md5);
   loopSeconds=(lengths && Number.isFinite(lengths[s])) ? lengths[s] : null;
   elapsedFrames=0;

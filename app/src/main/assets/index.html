@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V3.9.1</title>
+<title>C64 SID Player V3.9.2</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -25,11 +25,13 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">HVSC EXACT LOOP · V3.9.1</div>
+<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">HVSC EXACT LOOP · V3.9.2</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
-<div id="track">SUBTUNE -- / --</div><div id="duration" style="color:#8aff99;margin-top:5px">LENGTH: --:--</div>
+<div id="track">SUBTUNE -- / --</div>
+<div id="duration" style="color:#8aff99;margin-top:5px">LENGTH: --:--</div>
+<div id="playtime" style="color:#69edff;margin-top:5px">TIME: 0:00 / --:--</div>
 <div class="engine" id="engine">ENGINE: STARTING reSIDfp WORKER...</div>
 <div class="buffer" id="buffer">NATIVE BUFFER: 0 ms</div>
 </div>
@@ -48,6 +50,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 
 <script type="module">
 let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, loopOne=false;
+let durationSec=null, playStartedAt=0, accumulatedPlaySec=0;
 let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false;
 const $=id=>document.getElementById(id), status=s=>$("status").textContent=s;
 const toBase64=(buf)=>{
@@ -104,13 +107,18 @@ function startWorker(){
       status("Loaded with worker. Press PLAY.");
     }else if(m.type==="duration"){
       const sec=Number(m.seconds);
-      if(Number.isFinite(sec)&&sec>0){
-        const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
-        $("duration").textContent="LENGTH: "+mm+":"+String(ss).padStart(2,"0")+" · HVSC";
+      durationSec=(Number.isFinite(sec)&&sec>0)?sec:null;
+      if(durationSec){
+        const mm=Math.floor(durationSec/60), ss=Math.floor(durationSec%60);
+        $("duration").textContent="LENGTH: "+mm+":"+String(ss).padStart(2,"0")+" · HVSC · SUB "+(Number(m.sub)+1);
       }else{
         $("duration").textContent="LENGTH: UNKNOWN · HVSC";
       }
+      accumulatedPlaySec=0; playStartedAt=playing?performance.now():0;
+      updatePlaytime();
     }else if(m.type==="looped"){
+      accumulatedPlaySec=0; playStartedAt=playing?performance.now():0;
+      updatePlaytime();
       status("Looped current SID at its HVSC song length.");
     }else if(m.type==="pcm"){
       // Generation tag prevents already-posted PCM from the previous SID being heard.
@@ -147,12 +155,14 @@ function play(){
   if(current<0){if(queue.length)loadSong(0,true);return}
   if(!workerReady)return;
   android("startPlaybackService");
+  if(!playing) playStartedAt=performance.now();
   playing=true;
   worker.postMessage({type:"play"});
   status("Playing through native Android AudioTrack.");
 }
 function pauseInternal(clearNative=false){
   if(worker)worker.postMessage({type:"pause"});
+  if(playing&&playStartedAt){ accumulatedPlaySec+=(performance.now()-playStartedAt)/1000; playStartedAt=0; }
   playing=false;
   if(clearNative)android("clearPcm");
 }
@@ -218,6 +228,18 @@ window.onAndroidBackground=()=>{
 window.onAndroidForeground=()=>{
   if(playing) status("Playing through native Android AudioTrack.");
 };
+
+function fmtTime(sec){
+  sec=Math.max(0,Math.floor(sec||0));
+  return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0");
+}
+function updatePlaytime(){
+  let cur=accumulatedPlaySec;
+  if(playing&&playStartedAt) cur+=(performance.now()-playStartedAt)/1000;
+  if(loopOne&&durationSec&&cur>=durationSec) cur%=durationSec;
+  $("playtime").textContent="TIME: "+fmtTime(cur)+" / "+(durationSec?fmtTime(durationSec):"--:--");
+}
+setInterval(updatePlaytime,250);
 
 setInterval(()=>{
   const ms=android("bufferedMs");
