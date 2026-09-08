@@ -2,18 +2,12 @@ import createLibsidplayfp from "./sid/libsidplayfp.js";
 
 let module=null, player=null;
 let playing=false, generation=0, pcmGeneration=1;
+let sourceBytes=null, currentSong=0;
 let roms={kernal:null,basic:null,chargen:null};
-
-let sourceBytes=null;
-let currentSong=0;
-let elapsedFrames=0;
-let channels=2;
-let loopOne=false;
-// SID files normally contain no duration metadata. V3.7 uses a 3:00
-// repeat point for LOOP 1. A future version can use HVSC Songlengths.md5.
-const LOOP_SECONDS=180;
+let songlengths=new Map(), loopOne=false, loopSeconds=null, elapsedFrames=0, channels=2;
 
 function post(type, data={}) { self.postMessage({type, ...data}); }
+
 function clean(s){return String(s||"").replace(/\0/g,"").trim()}
 function parseHeader(a){
   const ascii=(o,n)=>clean(String.fromCharCode(...a.slice(o,o+n)));
@@ -23,10 +17,31 @@ function parseHeader(a){
     songs:(a[0x0e]<<8)|a[0x0f],start:(a[0x10]<<8)|a[0x11]
   };
 }
-function positionSeconds(){ return elapsedFrames/44100; }
-function reportPosition(extra={}){
-  post("position",{seconds:positionSeconds(),loopOne,loopSeconds:LOOP_SECONDS,...extra});
+
+
+function parseTime(field){
+  const m=/^(\d+):(\d+)(?:\.(\d{1,3}))?/.exec(field);
+  if(!m)return null;
+  let frac=0;
+  if(m[3]) frac=Number(m[3]) * (m[3].length===1?100:m[3].length===2?10:1);
+  return Number(m[1])*60+Number(m[2])+frac/1000;
 }
+async function loadSonglengths(){
+  try{
+    const text=await (await fetch("./Songlengths.md5")).text();
+    for(const raw of text.split(/\r?\n/)){
+      const line=raw.trim();
+      if(!line || line.startsWith(";") || line.startsWith("[")) continue;
+      const eq=line.indexOf("="); if(eq<=0) continue;
+      const md5=line.slice(0,eq).trim().toLowerCase();
+      if(!/^[0-9a-f]{32}$/.test(md5)) continue;
+      const times=line.slice(eq+1).trim().split(/\s+/).map(parseTime);
+      if(times.length && times.every(x=>x!==null)) songlengths.set(md5,times);
+    }
+    post("db",{entries:songlengths.size});
+  }catch(e){ post("db",{entries:0,error:String(e)}); }
+}
+function currentSeconds(){ return elapsedFrames/44100; }
 
 async function init(){
   try{
@@ -38,6 +53,7 @@ async function init(){
     const engine=(typeof module.getSidEngineName==="function")
       ? module.getSidEngineName() : "reSIDfp";
     test.delete();
+    await loadSonglengths();
     post("ready",{engine});
   }catch(e){post("error",{message:String(e&&(e.stack||e.message||e))})}
 }
@@ -47,15 +63,11 @@ async function makePlayer(bytes,song){
   if(player){try{player.delete()}catch(e){} player=null}
   player=new module.SidPlayerContext();
   if(!player.configure(44100,true))throw new Error(player.getLastError());
-
   if(typeof player.setEmulationConfig==="function"){
-    try{
-      player.setEmulationConfig({
-        sidModel:"MOS6581", forceSidModel:false, digiBoost:true
-      });
-    }catch(e){}
+    player.setEmulationConfig({
+      sidModel:"MOS6581", forceSidModel:false, digiBoost:true
+    });
   }
-
   if(roms.kernal||roms.basic||roms.chargen){
     if(!player.setSystemROMs(roms.kernal,roms.basic,roms.chargen))
       throw new Error("ROM: "+player.getLastError());
@@ -68,59 +80,24 @@ async function makePlayer(bytes,song){
   patched[0x11]=(s+1)&255;
 
   if(!player.loadSidBuffer(patched))throw new Error(player.getLastError());
-  if(typeof player.reset==="function"){
-    try{ player.reset(); }catch(e){}
-  }
-  channels=player.getChannels?player.getChannels():2;
+  if(typeof player.reset==="function"&&!player.reset())
+    throw new Error(player.getLastError());
   return s;
-}
-
-async function restartAtStart(){
-  if(!sourceBytes)return;
-  currentSong=await makePlayer(sourceBytes,currentSong);
-  elapsedFrames=0;
-}
-
-async function fastSeekTo(targetSeconds){
-  if(!sourceBytes)return;
-  const target=Math.max(0,targetSeconds);
-  const now=positionSeconds();
-
-  // Rewind requires rebuilding the C64 state from the start.
-  if(target < now){
-    await restartAtStart();
-  }
-
-  // Safe accelerated seek. V3.7.1 used 1,000,000-cycle render calls; on
-  // phones those calls can monopolize the WASM worker long enough to starve
-  // playback. 131,072 cycles is still ~4x larger than V3.7, but short enough
-  // to keep Android audio responsive.
-  const FAST_CYCLES=131072;
-  let iterations=0;
-  while(positionSeconds()+0.01 < target){
-    let pcm=player.render(FAST_CYCLES);
-    if(!pcm || pcm.length===0) throw new Error("Renderer returned no audio while seeking");
-    elapsedFrames += pcm.length/channels;
-    if((++iterations % 12)===0) await new Promise(r=>setTimeout(r,1));
-  }
-  post("seekReady",{seconds:positionSeconds(),loopOne,loopSeconds:LOOP_SECONDS});
-  reportPosition({seeking:false});
 }
 
 async function renderLoop(gen){
   const TARGET_CHUNK_MS=200;
   const cycles=16384;
-
   while(playing && gen===generation && player){
     try{
-      if(loopOne && positionSeconds()>=LOOP_SECONDS){
-        await restartAtStart();
-        post("looped");
+      if(loopOne && loopSeconds && currentSeconds()>=loopSeconds){
+        currentSong=await makePlayer(sourceBytes,currentSong);
+        post("looped",{seconds:loopSeconds});
       }
-
       const parts=[];
       let totalSamples=0;
       let producedMs=0;
+      const ch=player.getChannels?player.getChannels():2;
 
       while(producedMs<TARGET_CHUNK_MS){
         let pcm=player.render(cycles);
@@ -129,20 +106,14 @@ async function renderLoop(gen){
         parts.push(pcm);
         totalSamples += pcm.length;
         elapsedFrames += pcm.length/channels;
-        producedMs = (totalSamples/channels/44100)*1000;
-
-        if(loopOne && positionSeconds()>=LOOP_SECONDS) break;
+        producedMs = (totalSamples/ch/44100)*1000;
       }
 
       const merged=new Int16Array(totalSamples);
       let off=0;
       for(const p of parts){ merged.set(p,off); off+=p.length; }
 
-      self.postMessage(
-        {type:"pcm",generation:pcmGeneration,buffer:merged.buffer},
-        [merged.buffer]
-      );
-      reportPosition();
+      self.postMessage({type:"pcm",generation:pcmGeneration,buffer:merged.buffer},[merged.buffer]);
       await new Promise(r=>setTimeout(r,0));
     }catch(e){
       playing=false;
@@ -156,59 +127,33 @@ self.onmessage=async e=>{
   const m=e.data||{};
   try{
     if(m.type==="load"){
-      playing=false; generation++;
-      if(Number.isInteger(m.pcmGeneration)) pcmGeneration=m.pcmGeneration;
+      if (Number.isInteger(m.pcmGeneration)) pcmGeneration=m.pcmGeneration;
       const bytes=new Uint8Array(m.buffer);
       sourceBytes=bytes.slice();
       const header=parseHeader(bytes);
-      currentSong=await makePlayer(sourceBytes,m.song??Math.max(0,(header.start||1)-1));
-      elapsedFrames=0;
-      post("loaded",{header,sub:currentSong});
-      reportPosition();
+      const sub=await makePlayer(sourceBytes,m.song??Math.max(0,(header.start||1)-1));
+      currentSong=sub;
+      post("loaded",{header,sub});
       return;
     }
-
     if(m.type==="play"){
       if(!player)return;
-      if(playing)return;
       playing=true;
       const gen=++generation;
       renderLoop(gen);
       return;
     }
-
     if(m.type==="pause"){
       playing=false; generation++;
       return;
     }
-
     if(m.type==="stop"){
       playing=false; generation++;
       if(player){try{player.delete()}catch(e){} player=null}
-      elapsedFrames=0;
-      reportPosition();
       return;
     }
-
-    if(m.type==="seek"){
-      if(!player)return;
-      const resume=!!m.resume;
-      playing=false;
-      generation++;
-      if(Number.isInteger(m.pcmGeneration)) pcmGeneration=m.pcmGeneration;
-      post("position",{seconds:positionSeconds(),seeking:true,loopOne,loopSeconds:LOOP_SECONDS});
-      await fastSeekTo(Number(m.seconds)||0);
-      if(resume){
-        playing=true;
-        const gen=++generation;
-        renderLoop(gen);
-      }
-      return;
-    }
-
     if(m.type==="loopOne"){
       loopOne=!!m.enabled;
-      reportPosition();
       return;
     }
 

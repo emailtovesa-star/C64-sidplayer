@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V3.6</title>
+<title>C64 SID Player V3.9</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -25,11 +25,11 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">STABLE LOOP EDITION · V3.8</div>
+<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">HVSC EXACT LOOP · V3.9</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
-<div id="track">SUBTUNE -- / --</div>
+<div id="track">SUBTUNE -- / --</div><div id="duration" style="color:#8aff99;margin-top:5px">LENGTH: --:--</div>
 <div class="engine" id="engine">ENGINE: STARTING reSIDfp WORKER...</div>
 <div class="buffer" id="buffer">NATIVE BUFFER: 0 ms</div>
 </div>
@@ -37,10 +37,13 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 <button id="prevSong">|&lt; SONG</button><button id="prevSub">&lt; SUB</button><button id="play">PLAY</button><button id="pause">PAUSE</button>
 <button id="nextSub">SUB &gt;</button><button id="nextSong">SONG &gt;|</button><button id="restart">RESTART</button><button id="stop">STOP</button>
 </div>
+<div class="controls">
+<button id="loopOne">LOOP 1: OFF</button><button id="restartLoop">RESTART SONG</button>
+</div>
 <label class="load">ADD .SID FILES<input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream"></label>
 <div class="list" id="list"><div class="item">No tunes loaded.</div></div>
 <div class="status" id="status">Starting worker + native AudioTrack pipeline…</div>
-<div class="badge">Dedicated SID worker · Native Android AudioTrack · Stable playback · Background prebuffer</div>
+<div class="badge">Dedicated SID worker · Native Android AudioTrack · HVSC Songlengths exact loop</div>
 </div></div>
 
 <script type="module">
@@ -97,6 +100,16 @@ function startWorker(){
       $("release").textContent=m.header.release||"RELEASE INFO UNKNOWN";
       updateTrack(); renderList();
       status("Loaded with worker. Press PLAY.");
+    }else if(m.type==="duration"){
+      const sec=Number(m.seconds);
+      if(Number.isFinite(sec)&&sec>0){
+        const mm=Math.floor(sec/60), ss=Math.floor(sec%60);
+        $("duration").textContent="LENGTH: "+mm+":"+String(ss).padStart(2,"0")+" · HVSC";
+      }else{
+        $("duration").textContent="LENGTH: UNKNOWN · HVSC";
+      }
+    }else if(m.type==="looped"){
+      status("Looped current SID at its HVSC song length.");
     }else if(m.type==="pcm"){
       // Generation tag prevents already-posted PCM from the previous SID being heard.
       const gen = m.generation ?? pcmGeneration;
@@ -176,13 +189,13 @@ $("prevSub").onclick=()=>changeSub(-1);
 $("nextSub").onclick=()=>changeSub(1);
 $("prevSong").onclick=()=>changeSong(-1);
 $("nextSong").onclick=()=>changeSong(1);
-
 $("loopOne").onclick=()=>{
   loopOne=!loopOne;
   $("loopOne").textContent="LOOP 1: "+(loopOne?"ON":"OFF");
-  status(loopOne?"Loop 1 enabled: current SID restarts at 03:00.":"Loop 1 disabled.");
+  if(worker) worker.postMessage({type:"loopOne",enabled:loopOne});
+  status(loopOne?"Loop 1 ON · exact HVSC duration when available.":"Loop 1 OFF");
 };
-$("restartLoop").onclick=()=>{ if(current>=0) loadCurrent(true); };
+$("restartLoop").onclick=()=>{ if(current>=0) loadSong(current,true,activeSub); };
 
 window.onNativeFilePickerOpening=()=>{
   wasPlayingBeforePicker=playing;
@@ -207,18 +220,6 @@ window.onAndroidForeground=()=>{
 setInterval(()=>{
   const ms=android("bufferedMs");
   if(ms!==null&&ms!==undefined)$("buffer").textContent="NATIVE BUFFER: "+ms+" ms";
-},500);
-let loopStartedAt=0;
-setInterval(()=>{
-  if(playing && loopOne){
-    if(!loopStartedAt) loopStartedAt=Date.now();
-    if(Date.now()-loopStartedAt>=180000){
-      loopStartedAt=Date.now();
-      loadCurrent(true);
-    }
-  } else {
-    loopStartedAt=0;
-  }
 },500);
 </script>
 </body>
