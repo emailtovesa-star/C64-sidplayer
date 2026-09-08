@@ -4,8 +4,16 @@ let module=null, player=null;
 let playing=false, generation=0, pcmGeneration=1;
 let roms={kernal:null,basic:null,chargen:null};
 
-function post(type, data={}) { self.postMessage({type, ...data}); }
+let sourceBytes=null;
+let currentSong=0;
+let elapsedFrames=0;
+let channels=2;
+let loopOne=false;
+// SID files normally contain no duration metadata. V3.7 uses a 3:00
+// repeat point for LOOP 1. A future version can use HVSC Songlengths.md5.
+const LOOP_SECONDS=180;
 
+function post(type, data={}) { self.postMessage({type, ...data}); }
 function clean(s){return String(s||"").replace(/\0/g,"").trim()}
 function parseHeader(a){
   const ascii=(o,n)=>clean(String.fromCharCode(...a.slice(o,o+n)));
@@ -14,6 +22,10 @@ function parseHeader(a){
     name:ascii(0x16,32),author:ascii(0x36,32),release:ascii(0x56,32),
     songs:(a[0x0e]<<8)|a[0x0f],start:(a[0x10]<<8)|a[0x11]
   };
+}
+function positionSeconds(){ return elapsedFrames/44100; }
+function reportPosition(extra={}){
+  post("position",{seconds:positionSeconds(),loopOne,loopSeconds:LOOP_SECONDS,...extra});
 }
 
 async function init(){
@@ -35,11 +47,15 @@ async function makePlayer(bytes,song){
   if(player){try{player.delete()}catch(e){} player=null}
   player=new module.SidPlayerContext();
   if(!player.configure(44100,true))throw new Error(player.getLastError());
+
   if(typeof player.setEmulationConfig==="function"){
-    player.setEmulationConfig({
-      sidModel:"MOS6581", forceSidModel:false, digiBoost:true
-    });
+    try{
+      player.setEmulationConfig({
+        sidModel:"MOS6581", forceSidModel:false, digiBoost:true
+      });
+    }catch(e){}
   }
+
   if(roms.kernal||roms.basic||roms.chargen){
     if(!player.setSystemROMs(roms.kernal,roms.basic,roms.chargen))
       throw new Error("ROM: "+player.getLastError());
@@ -52,20 +68,54 @@ async function makePlayer(bytes,song){
   patched[0x11]=(s+1)&255;
 
   if(!player.loadSidBuffer(patched))throw new Error(player.getLastError());
-  if(typeof player.reset==="function"&&!player.reset())
-    throw new Error(player.getLastError());
+  if(typeof player.reset==="function"){
+    try{ player.reset(); }catch(e){}
+  }
+  channels=player.getChannels?player.getChannels():2;
   return s;
+}
+
+async function restartAtStart(){
+  if(!sourceBytes)return;
+  currentSong=await makePlayer(sourceBytes,currentSong);
+  elapsedFrames=0;
+}
+
+async function fastSeekTo(targetSeconds){
+  if(!sourceBytes)return;
+  const target=Math.max(0,targetSeconds);
+  const now=positionSeconds();
+
+  // Rewind requires rebuilding the C64 state from the start.
+  if(target < now){
+    await restartAtStart();
+  }
+
+  const cycles=32768;
+  while(positionSeconds()+0.01 < target){
+    let pcm=player.render(cycles);
+    if(!pcm || pcm.length===0) throw new Error("Renderer returned no audio while seeking");
+    elapsedFrames += pcm.length/channels;
+    // Yield occasionally to keep the worker responsive.
+    if((elapsedFrames % (44100*2)) < 4096) await new Promise(r=>setTimeout(r,0));
+  }
+  reportPosition({seeking:false});
 }
 
 async function renderLoop(gen){
   const TARGET_CHUNK_MS=200;
   const cycles=16384;
+
   while(playing && gen===generation && player){
     try{
+      if(loopOne && positionSeconds()>=LOOP_SECONDS){
+        await restartAtStart();
+        post("looped");
+      }
+
       const parts=[];
       let totalSamples=0;
       let producedMs=0;
-      const ch=player.getChannels?player.getChannels():2;
 
       while(producedMs<TARGET_CHUNK_MS){
         let pcm=player.render(cycles);
@@ -73,14 +123,21 @@ async function renderLoop(gen){
         pcm=pcm.slice();
         parts.push(pcm);
         totalSamples += pcm.length;
-        producedMs = (totalSamples/ch/44100)*1000;
+        elapsedFrames += pcm.length/channels;
+        producedMs = (totalSamples/channels/44100)*1000;
+
+        if(loopOne && positionSeconds()>=LOOP_SECONDS) break;
       }
 
       const merged=new Int16Array(totalSamples);
       let off=0;
       for(const p of parts){ merged.set(p,off); off+=p.length; }
 
-      self.postMessage({type:"pcm",generation:pcmGeneration,buffer:merged.buffer},[merged.buffer]);
+      self.postMessage(
+        {type:"pcm",generation:pcmGeneration,buffer:merged.buffer},
+        [merged.buffer]
+      );
+      reportPosition();
       await new Promise(r=>setTimeout(r,0));
     }catch(e){
       playing=false;
@@ -94,29 +151,62 @@ self.onmessage=async e=>{
   const m=e.data||{};
   try{
     if(m.type==="load"){
-      if (Number.isInteger(m.pcmGeneration)) pcmGeneration=m.pcmGeneration;
+      playing=false; generation++;
+      if(Number.isInteger(m.pcmGeneration)) pcmGeneration=m.pcmGeneration;
       const bytes=new Uint8Array(m.buffer);
+      sourceBytes=bytes.slice();
       const header=parseHeader(bytes);
-      const sub=await makePlayer(bytes,m.song??Math.max(0,(header.start||1)-1));
-      post("loaded",{header,sub});
+      currentSong=await makePlayer(sourceBytes,m.song??Math.max(0,(header.start||1)-1));
+      elapsedFrames=0;
+      post("loaded",{header,sub:currentSong});
+      reportPosition();
       return;
     }
+
     if(m.type==="play"){
       if(!player)return;
+      if(playing)return;
       playing=true;
       const gen=++generation;
       renderLoop(gen);
       return;
     }
+
     if(m.type==="pause"){
       playing=false; generation++;
       return;
     }
+
     if(m.type==="stop"){
       playing=false; generation++;
       if(player){try{player.delete()}catch(e){} player=null}
+      elapsedFrames=0;
+      reportPosition();
       return;
     }
+
+    if(m.type==="seek"){
+      if(!player)return;
+      const resume=!!m.resume;
+      playing=false;
+      generation++;
+      if(Number.isInteger(m.pcmGeneration)) pcmGeneration=m.pcmGeneration;
+      post("position",{seconds:positionSeconds(),seeking:true,loopOne,loopSeconds:LOOP_SECONDS});
+      await fastSeekTo(Number(m.seconds)||0);
+      if(resume){
+        playing=true;
+        const gen=++generation;
+        renderLoop(gen);
+      }
+      return;
+    }
+
+    if(m.type==="loopOne"){
+      loopOne=!!m.enabled;
+      reportPosition();
+      return;
+    }
+
     if(m.type==="roms"){
       if(m.kernal)roms.kernal=new Uint8Array(m.kernal);
       if(m.basic)roms.basic=new Uint8Array(m.basic);
