@@ -1,42 +1,11 @@
-# C64 SID Player V3.1 - simplified APK build
+# C64 SID Player V3.2 High Compatibility
 
-This version deliberately removes the Android NDK and native libsidplayfp build.
-It is a standard Android Java/WebView project, which makes the APK dramatically
-easier to compile.
+Android WebView shell using libsidplayfp-wasm with the reSIDfp engine. V3.2 replaces the limited jsSID/TinySID playback used by V3.1.
 
-## Build locally
+Goals: cycle-based C64 execution, accurate 6581/8580 emulation, digi/sample playback, better CIA/IRQ compatibility, offline playback after installation, and subtunes.
 
-Open the project in Android Studio and choose:
+The build workflow downloads the current libsidplayfp-wasm distribution into the APK before Gradle builds it. The resulting APK therefore does not need the network to initialize the SID engine.
 
-Build -> Build APK(s)
+RSID and other ROM-dependent tunes can still require legally obtained C64 KERNAL/BASIC/CHARGEN ROM images. ROM images are not included.
 
-The debug APK will be at:
-
-app/build/outputs/apk/debug/app-debug.apk
-
-## Build automatically on GitHub
-
-The repository includes:
-
-.github/workflows/build-apk.yml
-
-Push the project to GitHub. GitHub Actions will compile the app and upload an
-artifact named:
-
-C64-SID-Player-V3.1-APK
-
-Inside it is:
-
-C64-SID-Player-V3.1.apk
-
-That debug APK is signed by the Android debug build process and can be installed
-directly on an Android phone after allowing installation from the browser/files
-app used to open it.
-
-## Important playback note
-
-This simplified APK uses jsSID scripts from jsDelivr at runtime. Therefore it
-needs internet access to initialize the playback engine. This tradeoff removes
-the difficult Android NDK/libsidplayfp compile step.
-
-No SID music is included.
+libsidplayfp-wasm and its upstream components are GPL-2.0-or-later; the workflow packages its license/notices alongside the engine.
