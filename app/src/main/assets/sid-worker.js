@@ -1,7 +1,7 @@
 import createLibsidplayfp from "./sid/libsidplayfp.js";
 
 let module=null, player=null;
-let playing=false, generation=0;
+let playing=false, generation=0, pcmGeneration=1;
 let roms={kernal:null,basic:null,chargen:null};
 
 function post(type, data={}) { self.postMessage({type, ...data}); }
@@ -58,7 +58,7 @@ async function makePlayer(bytes,song){
 }
 
 async function renderLoop(gen){
-  const TARGET_CHUNK_MS=500;
+  const TARGET_CHUNK_MS=200;
   const cycles=16384;
   while(playing && gen===generation && player){
     try{
@@ -80,7 +80,7 @@ async function renderLoop(gen){
       let off=0;
       for(const p of parts){ merged.set(p,off); off+=p.length; }
 
-      post("pcm",{buffer:merged.buffer},[merged.buffer]);
+      self.postMessage({type:"pcm",generation:pcmGeneration,buffer:merged.buffer},[merged.buffer]);
       await new Promise(r=>setTimeout(r,0));
     }catch(e){
       playing=false;
@@ -94,6 +94,7 @@ self.onmessage=async e=>{
   const m=e.data||{};
   try{
     if(m.type==="load"){
+      if (Number.isInteger(m.pcmGeneration)) pcmGeneration=m.pcmGeneration;
       const bytes=new Uint8Array(m.buffer);
       const header=parseHeader(bytes);
       const sub=await makePlayer(bytes,m.song??Math.max(0,(header.start||1)-1));
