@@ -91,13 +91,17 @@ async function fastSeekTo(targetSeconds){
     await restartAtStart();
   }
 
-  const cycles=32768;
+  // Fast seek: run the emulator in large chunks instead of normal playback-size
+  // chunks. 1,000,000 C64 cycles is roughly one second of emulated time, so
+  // this is dramatically faster than the old 32K-cycle seek loop.
+  const FAST_CYCLES=1000000;
+  let iterations=0;
   while(positionSeconds()+0.01 < target){
-    let pcm=player.render(cycles);
+    let pcm=player.render(FAST_CYCLES);
     if(!pcm || pcm.length===0) throw new Error("Renderer returned no audio while seeking");
     elapsedFrames += pcm.length/channels;
-    // Yield occasionally to keep the worker responsive.
-    if((elapsedFrames % (44100*2)) < 4096) await new Promise(r=>setTimeout(r,0));
+    // Keep the worker responsive without slowing every seek step.
+    if((++iterations % 8)===0) await new Promise(r=>setTimeout(r,0));
   }
   reportPosition({seeking:false});
 }
