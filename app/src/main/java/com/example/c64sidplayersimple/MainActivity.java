@@ -99,10 +99,15 @@ public class MainActivity extends Activity {
             stopService(new Intent(MainActivity.this, PlaybackService.class));
         }
 
-        // PCM is sent as base64-encoded signed 16-bit little-endian interleaved stereo.
+        // PCM is generation-tagged so stale audio from the previous SID is rejected.
         @JavascriptInterface
-        public void enqueuePcm(String base64Pcm) {
-            PlaybackService.enqueueBase64(base64Pcm);
+        public void beginPcmGeneration(int generation) {
+            PlaybackService.beginGeneration(generation);
+        }
+
+        @JavascriptInterface
+        public void enqueuePcm(int generation, String base64Pcm) {
+            PlaybackService.enqueueBase64(generation, base64Pcm);
         }
 
         @JavascriptInterface
