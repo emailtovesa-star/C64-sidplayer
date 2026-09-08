@@ -1,11 +1,18 @@
-# C64 SID Player V3.2 High Compatibility
+# C64 SID Player V3.3 — High Compatibility
 
-Android WebView shell using libsidplayfp-wasm with the reSIDfp engine. V3.2 replaces the limited jsSID/TinySID playback used by V3.1.
+This version actually replaces the old jsSID/TinySID playback code with
+libsidplayfp WebAssembly using the reSIDfp artifact.
 
-Goals: cycle-based C64 execution, accurate 6581/8580 emulation, digi/sample playback, better CIA/IRQ compatibility, offline playback after installation, and subtunes.
+Key changes:
+- libsidplayfp/reSIDfp PCM renderer is connected to Web Audio.
+- On-screen engine indicator proves which engine is active.
+- Digi boost is requested.
+- Optional user-supplied C64 KERNAL (8192 bytes), BASIC (8192 bytes), and
+  CHARGEN (4096 bytes) ROM selectors are included for ROM-dependent tunes.
+- GitHub Actions refuses the build if the old jsSID URL is still in index.html.
+- The reSIDfp JS/WASM runtime is downloaded and packaged into the APK at build time.
 
-The build workflow downloads the current libsidplayfp-wasm distribution into the APK before Gradle builds it. The resulting APK therefore does not need the network to initialize the SID engine.
+No SID music or copyrighted C64 ROM images are included.
 
-RSID and other ROM-dependent tunes can still require legally obtained C64 KERNAL/BASIC/CHARGEN ROM images. ROM images are not included.
-
-libsidplayfp-wasm and its upstream components are GPL-2.0-or-later; the workflow packages its license/notices alongside the engine.
+GPL note: libsidplayfp-wasm/libsidplayfp/reSIDfp are GPL-family software.
+Keep the corresponding license/source notices when distributing binaries.
