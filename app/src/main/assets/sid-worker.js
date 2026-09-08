@@ -82,6 +82,13 @@ async function makePlayer(bytes,song){
   if(!player.loadSidBuffer(patched))throw new Error(player.getLastError());
   if(typeof player.reset==="function"&&!player.reset())
     throw new Error(player.getLastError());
+
+  channels=player.getChannels?player.getChannels():2;
+  const md5=(typeof player.getTuneMd5==="function" ? String(player.getTuneMd5()||"") : "").trim().toLowerCase();
+  const lengths=songlengths.get(md5);
+  loopSeconds=(lengths && Number.isFinite(lengths[s])) ? lengths[s] : null;
+  elapsedFrames=0;
+  post("duration",{seconds:loopSeconds,md5,sub:s,dbEntries:songlengths.size});
   return s;
 }
 
@@ -107,6 +114,7 @@ async function renderLoop(gen){
         totalSamples += pcm.length;
         elapsedFrames += pcm.length/channels;
         producedMs = (totalSamples/ch/44100)*1000;
+        if(loopOne && loopSeconds && currentSeconds()>=loopSeconds) break;
       }
 
       const merged=new Int16Array(totalSamples);

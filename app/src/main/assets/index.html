@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V3.9</title>
+<title>C64 SID Player V3.9.1</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -25,7 +25,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">HVSC EXACT LOOP · V3.9</div>
+<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">HVSC EXACT LOOP · V3.9.1</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
@@ -87,7 +87,9 @@ function startWorker(){
   worker=new Worker("./sid-worker.js",{type:"module"});
   worker.onmessage=e=>{
     const m=e.data||{};
-    if(m.type==="ready"){
+    if(m.type==="db"){
+      status(m.entries ? "HVSC database loaded: "+m.entries+" tunes." : "HVSC database failed to load.");
+    }else if(m.type==="ready"){
       workerReady=true;
       $("engine").textContent="ENGINE: "+m.engine+" · WORKER";
       status("reSIDfp worker ready. Native AudioTrack ready.");
