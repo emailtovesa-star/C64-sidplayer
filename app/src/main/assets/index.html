@@ -1,1 +1,139 @@
 
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>C64 SID Player</title>
+
+<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/jssid.core.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/stream.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/pico.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/jssid.mos6510.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/jssid.tinysid.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/jssid.sidplayer.js"></script>
+
+<style>
+:root{--bg:#080821;--panel:#221d7a;--ink:#d7d6ff;--cyan:#70edff;--pink:#ff72c7;--yellow:#ffe36e}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(#18145d,#080821 45%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
+.wrap{max-width:760px;margin:auto}
+h1{text-align:center;color:white;font-size:34px;margin:8px 0 0;text-shadow:3px 3px #4a45c3}
+.sub{text-align:center;color:var(--cyan);font-size:12px;margin-bottom:14px}
+.panel{background:var(--panel);border:2px solid #6864e2;border-radius:14px;padding:13px;box-shadow:0 16px 40px #0008}
+.screen{background:#020213;border:2px solid #4b47ad;border-radius:9px;padding:12px}
+#title{color:white;font-weight:bold;font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#author{color:var(--cyan);margin-top:5px}
+#release{color:var(--yellow);margin-top:4px}
+#track{color:var(--pink);margin-top:7px}
+.controls{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}
+button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color:white;min-height:45px;font:bold 13px monospace;padding:8px}
+.load{display:flex;align-items:center;justify-content:center;margin-top:10px}
+input[type=file]{display:none}
+.list{margin-top:10px;background:#08072c;border:1px solid #4e49ae;border-radius:8px;max-height:250px;overflow:auto}
+.item{padding:9px;border-bottom:1px solid #292668}
+.item.current{background:#302a92}.item:last-child{border-bottom:0}
+.status{margin-top:10px;background:#09082d;padding:9px;border-radius:8px;font-size:11px}
+@media(max-width:520px){.controls{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>C64 SID PLAYER</h1>
+<div class="sub">ANDROID SIMPLE BUILD · V3.1</div>
+<div class="panel">
+ <div class="screen">
+  <div id="title">NO SID LOADED</div>
+  <div id="author">ADD SID FILES</div>
+  <div id="release">&nbsp;</div>
+  <div id="track">SUBTUNE -- / --</div>
+ </div>
+
+ <div class="controls">
+  <button id="prevSong">|&lt; SONG</button>
+  <button id="prevSub">&lt; SUB</button>
+  <button id="play">PLAY</button>
+  <button id="pause">PAUSE</button>
+  <button id="nextSub">SUB &gt;</button>
+  <button id="nextSong">SONG &gt;|</button>
+  <button id="restart">RESTART</button>
+  <button id="stop">STOP</button>
+ </div>
+
+ <label class="load">ADD .SID FILES
+  <input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream">
+ </label>
+
+ <div class="list" id="list"><div class="item">No tunes loaded.</div></div>
+ <div class="status" id="status">Ready. This simplified build needs internet access to load the jsSID playback engine.</div>
+</div>
+</div>
+
+<script>
+let queue=[], current=-1, player=null, activeSub=0, playing=false;
+const $=x=>document.getElementById(x);
+const status=s=>$('status').textContent=s;
+const clean=s=>String(s||'').replace(/\0/g,'').trim();
+
+async function toBinary(file){
+ const a=new Uint8Array(await file.arrayBuffer()); let out='',chunk=8192;
+ for(let i=0;i<a.length;i+=chunk) out+=String.fromCharCode.apply(null,a.subarray(i,i+chunk));
+ return out;
+}
+function render(){
+ $('list').innerHTML='';
+ if(!queue.length){$('list').innerHTML='<div class="item">No tunes loaded.</div>';return}
+ queue.forEach((x,i)=>{
+  const d=document.createElement('div');d.className='item '+(i===current?'current':'');
+  d.textContent=x.file.name;d.onclick=()=>load(i,true);$('list').appendChild(d);
+ });
+}
+async function load(i,autoplay){
+ if(i<0||i>=queue.length)return;
+ current=i;
+ try{
+   const q=queue[i];
+   if(!q.bin)q.bin=await toBinary(q.file);
+   if(typeof jsSID==='undefined')throw new Error('SID engine not loaded. Check internet connection.');
+   if(player)try{player.stop()}catch(e){}
+   player=new jsSID.SIDPlayer({quality:jsSID.quality.low,model:0,clock:985248});
+   player.loadFileFromData(q.bin);
+   const f=player.getSidFile();
+   activeSub=f.startsong||0;
+   update();
+   render();
+   status('Loaded '+q.file.name);
+   if(autoplay)play();
+ }catch(e){status('Error: '+e.message)}
+}
+function update(){
+ if(!player||!player.getSidFile())return;
+ const f=player.getSidFile();
+ $('title').textContent=clean(f.name)||queue[current].file.name;
+ $('author').textContent='BY '+(clean(f.author)||'UNKNOWN');
+ $('release').textContent=clean(f.published)||'RELEASE INFO UNKNOWN';
+ activeSub=f.currentsong||0;
+ $('track').textContent='SUBTUNE '+(activeSub+1)+' / '+((f.subsongs||0)+1);
+}
+function play(){if(!player){if(queue.length)load(0,true);return}player.play();playing=true;status('Playing')}
+function pause(){if(player)player.stop();playing=false;status('Paused')}
+function changeSub(n){
+ if(!player||!player.getSidFile())return;
+ let max=player.getSidFile().subsongs||0;
+ activeSub=Math.max(0,Math.min(max,activeSub+n));
+ player.changeTrack(activeSub);update();play();
+}
+function stepSong(n){if(queue.length)load((current+n+queue.length)%queue.length,true)}
+
+$('files').onchange=e=>{
+ for(const f of [...e.target.files]) if(f.name.toLowerCase().endsWith('.sid'))queue.push({file:f,bin:null});
+ render();if(current<0&&queue.length)load(0,false);e.target.value='';
+};
+$('play').onclick=play;$('pause').onclick=pause;
+$('prevSub').onclick=()=>changeSub(-1);$('nextSub').onclick=()=>changeSub(1);
+$('prevSong').onclick=()=>stepSong(-1);$('nextSong').onclick=()=>stepSong(1);
+$('restart').onclick=()=>{if(player){player.changeTrack(activeSub);play()}};
+$('stop').onclick=()=>{if(player){player.stop();player.changeTrack(activeSub)}playing=false;status('Stopped')};
+</script>
+</body>
+</html>
