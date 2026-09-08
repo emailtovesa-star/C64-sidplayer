@@ -68,7 +68,6 @@ public class MainActivity extends Activity {
                     WebView webView,
                     ValueCallback<Uri[]> filePathCallback,
                     FileChooserParams params) {
-
                 if (callback != null) callback.onReceiveValue(null);
                 callback = filePathCallback;
 
@@ -91,13 +90,29 @@ public class MainActivity extends Activity {
     public class AndroidBridge {
         @JavascriptInterface
         public void startPlaybackService() {
-            Intent i = new Intent(MainActivity.this, PlaybackKeepAliveService.class);
+            Intent i = new Intent(MainActivity.this, PlaybackService.class);
             ContextCompat.startForegroundService(MainActivity.this, i);
         }
 
         @JavascriptInterface
         public void stopPlaybackService() {
-            stopService(new Intent(MainActivity.this, PlaybackKeepAliveService.class));
+            stopService(new Intent(MainActivity.this, PlaybackService.class));
+        }
+
+        // PCM is sent as base64-encoded signed 16-bit little-endian interleaved stereo.
+        @JavascriptInterface
+        public void enqueuePcm(String base64Pcm) {
+            PlaybackService.enqueueBase64(base64Pcm);
+        }
+
+        @JavascriptInterface
+        public void clearPcm() {
+            PlaybackService.clearQueue();
+        }
+
+        @JavascriptInterface
+        public int bufferedMs() {
+            return PlaybackService.getBufferedMs();
         }
     }
 
@@ -149,7 +164,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        stopService(new Intent(this, PlaybackKeepAliveService.class));
         if (web != null) {
             web.loadUrl("about:blank");
             web.destroy();
