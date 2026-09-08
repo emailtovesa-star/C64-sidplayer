@@ -1,36 +1,46 @@
-name: Build Android APK V3.3
+name: Build Android APK V3.4
 on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
       - name: Fetch libsidplayfp reSIDfp runtime
         run: |
           mkdir -p app/src/main/assets/sid
           curl -fL https://raw.githubusercontent.com/chrisgleissner/libsidplayfp-wasm/main/dist/libsidplayfp.js -o app/src/main/assets/sid/libsidplayfp.js
           curl -fL https://raw.githubusercontent.com/chrisgleissner/libsidplayfp-wasm/main/dist/libsidplayfp.wasm -o app/src/main/assets/sid/libsidplayfp.wasm
-      - name: Prove V3.3 uses libsidplayfp
+
+      - name: Prove V3.4 asset-loader build
         run: |
+          grep -q 'HIGH COMPATIBILITY · V3.4' app/src/main/assets/index.html
           grep -q 'createLibsidplayfp' app/src/main/assets/index.html
-          grep -q 'HIGH COMPATIBILITY · V3.3' app/src/main/assets/index.html
+          grep -q 'appassets.androidplatform.net' app/src/main/java/com/example/c64sidplayersimple/MainActivity.java
+          grep -q 'WebViewAssetLoader' app/src/main/java/com/example/c64sidplayersimple/MainActivity.java
           ! grep -q 'jhohertz/jsSID' app/src/main/assets/index.html
           test -s app/src/main/assets/sid/libsidplayfp.wasm
+
       - name: Build debug APK
         run: gradle :app:assembleDebug
+
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk C64-SID-Player-V3.3.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk C64-SID-Player-V3.4.apk
+
       - uses: actions/upload-artifact@v4
         with:
-          name: C64-SID-Player-V3.3-APK
-          path: C64-SID-Player-V3.3.apk
+          name: C64-SID-Player-V3.4-APK
+          path: C64-SID-Player-V3.4.apk
