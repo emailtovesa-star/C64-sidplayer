@@ -8,6 +8,7 @@
         android:allowBackup="true"
         android:label="C64 SID Player"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
@@ -19,7 +20,7 @@
         </activity>
 
         <service
-            android:name=".PlaybackKeepAliveService"
+            android:name=".PlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
     </application>
