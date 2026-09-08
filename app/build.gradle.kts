@@ -1,4 +1,6 @@
-plugins { id("com.android.application") }
+plugins {
+    id("com.android.application")
+}
 
 android {
     namespace = "com.example.c64sidplayersimple"
@@ -8,8 +10,8 @@ android {
         applicationId = "com.example.c64sidplayersimple"
         minSdk = 24
         targetSdk = 35
-        versionCode = 34
-        versionName = "3.4"
+        versionCode = 342
+        versionName = "3.4.2"
     }
 }
 
