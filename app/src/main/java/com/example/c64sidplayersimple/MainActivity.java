@@ -7,9 +7,13 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
+
+import androidx.annotation.Nullable;
+import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewClientCompat;
 
 public class MainActivity extends Activity {
     private static final int PICK = 1001;
@@ -31,7 +35,29 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(true);
         s.setMediaPlaybackRequiresUserGesture(true);
 
-        web.setWebViewClient(new WebViewClient());
+        final WebViewAssetLoader assetLoader =
+                new WebViewAssetLoader.Builder()
+                        .addPathHandler("/assets/",
+                                new WebViewAssetLoader.AssetsPathHandler(this))
+                        .build();
+
+        web.setWebViewClient(new WebViewClientCompat() {
+            @Nullable
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, WebResourceRequest request) {
+                return assetLoader.shouldInterceptRequest(request.getUrl());
+            }
+
+            @Nullable
+            @Override
+            @SuppressWarnings("deprecation")
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView view, String url) {
+                return assetLoader.shouldInterceptRequest(Uri.parse(url));
+            }
+        });
+
         web.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(
@@ -46,17 +72,12 @@ public class MainActivity extends Activity {
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType("*/*");
                 i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-                i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
-                        "audio/prs.sid",
-                        "audio/x-sid",
-                        "application/octet-stream"
-                });
                 startActivityForResult(i, PICK);
                 return true;
             }
         });
 
-        web.loadUrl("file:///android_asset/index.html");
+        web.loadUrl("https://appassets.androidplatform.net/assets/index.html");
     }
 
     @Override
