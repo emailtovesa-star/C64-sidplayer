@@ -17,41 +17,58 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class PlaybackService extends Service {
-    private static final String CHANNEL = "sid_playback_v36";
+    private static final String CHANNEL = "sid_playback_v361";
     private static final int ID = 64;
     private static final int SAMPLE_RATE = 44100;
     private static final int CHANNELS = 2;
     private static final int BYTES_PER_SAMPLE = 2;
     private static final int BYTES_PER_SECOND = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE;
 
-    private static final LinkedBlockingQueue<byte[]> queue = new LinkedBlockingQueue<>();
+    private static final class PcmBlock {
+        final int generation;
+        final byte[] data;
+        PcmBlock(int generation, byte[] data) {
+            this.generation = generation;
+            this.data = data;
+        }
+    }
+
+    private static final LinkedBlockingQueue<PcmBlock> queue = new LinkedBlockingQueue<>();
     private static final AtomicInteger queuedBytes = new AtomicInteger(0);
+    private static final AtomicInteger activeGeneration = new AtomicInteger(1);
+
     private static volatile boolean running = false;
     private static AudioTrack audioTrack;
     private static Thread writerThread;
 
-    public static void enqueueBase64(String data) {
-        if (data == null || data.isEmpty()) return;
-        try {
-            byte[] pcm = Base64.decode(data, Base64.NO_WRAP);
-            queuedBytes.addAndGet(pcm.length);
-            queue.offer(pcm);
-        } catch (Throwable ignored) {
-        }
-    }
-
-    public static void clearQueue() {
+    public static void beginGeneration(int generation) {
+        activeGeneration.set(generation);
         queue.clear();
         queuedBytes.set(0);
+
         AudioTrack t = audioTrack;
         if (t != null) {
             try {
                 t.pause();
                 t.flush();
                 t.play();
-            } catch (Throwable ignored) {
-            }
+            } catch (Throwable ignored) {}
         }
+    }
+
+    public static void enqueueBase64(int generation, String data) {
+        if (generation != activeGeneration.get()) return;
+        if (data == null || data.isEmpty()) return;
+        try {
+            byte[] pcm = Base64.decode(data, Base64.NO_WRAP);
+            if (generation != activeGeneration.get()) return;
+            queuedBytes.addAndGet(pcm.length);
+            queue.offer(new PcmBlock(generation, pcm));
+        } catch (Throwable ignored) {}
+    }
+
+    public static void clearQueue() {
+        beginGeneration(activeGeneration.incrementAndGet());
     }
 
     public static int getBufferedMs() {
@@ -85,7 +102,7 @@ public class PlaybackService extends Service {
                 : new Notification.Builder(this);
 
         b.setContentTitle("C64 SID Player")
-         .setContentText("V3.6 native audio playback active")
+         .setContentText("V3.6.1 native audio playback active")
          .setSmallIcon(android.R.drawable.ic_media_play)
          .setContentIntent(pi)
          .setOngoing(true);
@@ -119,30 +136,41 @@ public class PlaybackService extends Service {
                 attrs, fmt, bufferSize,
                 AudioTrack.MODE_STREAM,
                 android.media.AudioManager.AUDIO_SESSION_ID_GENERATE);
-
         audioTrack.play();
 
         writerThread = new Thread(() -> {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO);
+
             while (running) {
                 try {
-                    byte[] pcm = queue.take();
+                    PcmBlock block = queue.take();
+                    if (block.generation != activeGeneration.get()) {
+                        queuedBytes.addAndGet(-block.data.length);
+                        continue;
+                    }
+
                     int off = 0;
-                    while (running && off < pcm.length) {
+                    while (running && off < block.data.length) {
+                        if (block.generation != activeGeneration.get()) {
+                            queuedBytes.addAndGet(-(block.data.length - off));
+                            break;
+                        }
+
                         int n = audioTrack.write(
-                                pcm, off, pcm.length - off,
+                                block.data, off, block.data.length - off,
                                 AudioTrack.WRITE_BLOCKING);
+
                         if (n > 0) {
                             off += n;
                             queuedBytes.addAndGet(-n);
                         } else if (n < 0) {
+                            queuedBytes.addAndGet(-(block.data.length - off));
                             break;
                         }
                     }
                 } catch (InterruptedException e) {
                     break;
-                } catch (Throwable ignored) {
-                }
+                } catch (Throwable ignored) {}
             }
         }, "SID-AudioWriter");
         writerThread.start();
@@ -176,8 +204,5 @@ public class PlaybackService extends Service {
         super.onDestroy();
     }
 
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+    @Override public IBinder onBind(Intent intent) { return null; }
 }
