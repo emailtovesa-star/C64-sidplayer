@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -12,6 +13,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
 
@@ -20,7 +22,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private ValueCallback<Uri[]> callback;
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -34,6 +36,8 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
         s.setMediaPlaybackRequiresUserGesture(true);
+
+        web.addJavascriptInterface(new AndroidBridge(), "AndroidPlayer");
 
         final WebViewAssetLoader assetLoader =
                 new WebViewAssetLoader.Builder()
@@ -68,6 +72,10 @@ public class MainActivity extends Activity {
                 if (callback != null) callback.onReceiveValue(null);
                 callback = filePathCallback;
 
+                web.evaluateJavascript(
+                        "window.onNativeFilePickerOpening&&window.onNativeFilePickerOpening()",
+                        null);
+
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType("*/*");
@@ -78,6 +86,39 @@ public class MainActivity extends Activity {
         });
 
         web.loadUrl("https://appassets.androidplatform.net/assets/index.html");
+    }
+
+    public class AndroidBridge {
+        @JavascriptInterface
+        public void startPlaybackService() {
+            Intent i = new Intent(MainActivity.this, PlaybackKeepAliveService.class);
+            ContextCompat.startForegroundService(MainActivity.this, i);
+        }
+
+        @JavascriptInterface
+        public void stopPlaybackService() {
+            stopService(new Intent(MainActivity.this, PlaybackKeepAliveService.class));
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (web != null) {
+            web.evaluateJavascript(
+                    "window.onAndroidBackground&&window.onAndroidBackground()",
+                    null);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (web != null) {
+            web.evaluateJavascript(
+                    "window.onAndroidForeground&&window.onAndroidForeground()",
+                    null);
+        }
     }
 
     @Override
@@ -100,10 +141,15 @@ public class MainActivity extends Activity {
 
         callback.onReceiveValue(resultUris);
         callback = null;
+
+        web.postDelayed(() -> web.evaluateJavascript(
+                "window.onNativeFilePickerClosed&&window.onNativeFilePickerClosed()",
+                null), 150);
     }
 
     @Override
     protected void onDestroy() {
+        stopService(new Intent(this, PlaybackKeepAliveService.class));
         if (web != null) {
             web.loadUrl("about:blank");
             web.destroy();
