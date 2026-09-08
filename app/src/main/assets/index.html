@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V3.3</title>
+<title>C64 SID Player V3.4.2</title>
 <style>
 :root{--bg:#080821;--panel:#221d7a;--ink:#d7d6ff;--cyan:#70edff;--pink:#ff72c7;--yellow:#ffe36e}
 *{box-sizing:border-box} body{margin:0;background:linear-gradient(#18145d,#080821 45%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -16,13 +16,13 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 .load{display:flex;align-items:center;justify-content:center;margin-top:10px} input[type=file]{display:none}
 .list{margin-top:10px;background:#08072c;border:1px solid #4e49ae;border-radius:8px;max-height:220px;overflow:auto}
 .item{padding:9px;border-bottom:1px solid #292668}.item.current{background:#302a92}.item:last-child{border-bottom:0}
-.status{margin-top:10px;background:#09082d;padding:9px;border-radius:8px;font-size:11px;white-space:pre-wrap}
+.status{margin-top:10px;background:#09082d;padding:9px;border-radius:8px;font-size:11px;white-space:pre-wrap;word-break:break-word}
 .roms{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}.roms label{font-size:10px;text-align:center;background:#12104b;border:1px solid #6864e2;padding:7px;border-radius:7px}
 @media(max-width:520px){.controls{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
-<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">HIGH COMPATIBILITY · V3.3</div>
+<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">HIGH COMPATIBILITY · V3.4.2</div>
 <div class="panel">
 <div class="screen"><div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div><div id="track">SUBTUNE -- / --</div><div class="engine" id="engine">ENGINE: STARTING reSIDfp...</div></div>
 <div class="controls"><button id="prevSong">|&lt; SONG</button><button id="prevSub">&lt; SUB</button><button id="play">PLAY</button><button id="pause">PAUSE</button><button id="nextSub">SUB &gt;</button><button id="nextSong">SONG &gt;|</button><button id="restart">RESTART</button><button id="stop">STOP</button></div>
@@ -34,6 +34,27 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </div>
 <div class="list" id="list"><div class="item">No tunes loaded.</div></div><div class="status" id="status">Initializing libsidplayfp/reSIDfp…</div>
 </div></div>
+
+<script>
+window.__sidEngineReady = false;
+const diag = s => {
+  const el = document.getElementById("status");
+  if (el) el.textContent = s;
+};
+window.addEventListener("error", e => {
+  diag("JS ERROR: " + (e.message || "unknown") + "\nURL: " + location.href);
+});
+window.addEventListener("unhandledrejection", e => {
+  diag("PROMISE ERROR: " + String(e.reason && (e.reason.stack || e.reason.message || e.reason)) + "\nURL: " + location.href);
+});
+setTimeout(() => {
+  if (!window.__sidEngineReady) {
+    document.getElementById("engine").textContent = "ENGINE: INITIALIZATION TIMEOUT";
+    diag("Engine initialization timed out.\nOrigin: " + location.origin + "\nURL: " + location.href);
+  }
+}, 12000);
+</script>
+
 <script type="module">
 import createLibsidplayfp from "./sid/libsidplayfp.js";
 
@@ -45,14 +66,22 @@ const clean=s=>String(s||'').replace(/\0/g,'').trim();
 
 async function initEngine(){
  try{
-   module=await createLibsidplayfp({locateFile:(asset)=>new URL("./sid/"+asset,location.href).href});
+   status("Loading libsidplayfp module…\nOrigin: "+location.origin);
+   module=await createLibsidplayfp({
+     locateFile:(asset)=>new URL("./sid/"+asset,location.href).href
+   });
+   status("Creating SID engine…");
    const test=new module.SidPlayerContext();
    if(!test.configure(44100,true)) throw new Error(test.getLastError());
    const name=(typeof module.getSidEngineName==="function")?module.getSidEngineName():"reSIDfp";
    test.delete();
+   window.__sidEngineReady=true;
    $('engine').textContent="ENGINE: "+name+" · libsidplayfp";
    status("reSIDfp ready. Add SID files.");
- }catch(e){ $('engine').textContent="ENGINE ERROR"; status("Engine error: "+e.message); }
+ }catch(e){
+   $('engine').textContent="ENGINE ERROR";
+   status("Engine error: "+String(e && (e.stack || e.message || e)));
+ }
 }
 await initEngine();
 
@@ -83,7 +112,6 @@ async function makePlayer(bytes,song){
  if(roms.kernal||roms.basic||roms.chargen){
    if(!player.setSystemROMs(roms.kernal,roms.basic,roms.chargen))throw new Error("ROM: "+player.getLastError());
  }
- // Select subtune by patching PSID/RSID startSong field before loading.
  let patched=bytes.slice(), songs=Math.max(1,(patched[0x0e]<<8)|patched[0x0f]);
  let s=Math.max(0,Math.min(songs-1,song));
  patched[0x10]=((s+1)>>8)&255; patched[0x11]=(s+1)&255;
@@ -101,19 +129,19 @@ async function load(i,autoplay){
    $('release').textContent=q.h.release||"RELEASE INFO UNKNOWN"; updateTrack();renderList();
    status("Loaded "+q.file.name+" with reSIDfp");
    if(autoplay)await play();
- }catch(e){status("Load error: "+e.message)}
+ }catch(e){status("Load error: "+String(e && (e.stack || e.message || e)))}
 }
 function updateTrack(){let h=queue[current]?.h;if(h)$('track').textContent="SUBTUNE "+(activeSub+1)+" / "+Math.max(1,h.songs)}
 async function play(){
  if(current<0){if(queue.length)await load(0,true);return}
  if(!player){await load(current,false);if(!player)return}
  try{
-  stopAudio(); // player remains; only closes prior WebAudio
+  stopAudio();
   audio=new (window.AudioContext||window.webkitAudioContext)({sampleRate:44100});
   await audio.resume(); playing=true; nextTime=audio.currentTime+0.06; const mygen=++generation;
   status("Playing · reSIDfp");
   pump(mygen);
- }catch(e){status("Audio error: "+e.message)}
+ }catch(e){status("Audio error: "+String(e && (e.stack || e.message || e)))}
 }
 function pump(gen){
  if(!playing||gen!==generation||!player||!audio)return;
@@ -129,12 +157,12 @@ function pump(gen){
     let s=audio.createBufferSource();s.buffer=b;s.connect(audio.destination);s.start(nextTime);nextTime+=frames/44100;
   }
   pumpTimer=setTimeout(()=>pump(gen),40);
- }catch(e){playing=false;status("Playback error: "+e.message)}
+ }catch(e){playing=false;status("Playback error: "+String(e && (e.stack || e.message || e)))}
 }
 async function selectSub(n){
  if(current<0)return; let q=queue[current], max=Math.max(1,q.h.songs);
  activeSub=Math.max(0,Math.min(max-1,activeSub+n)); stopAudio();
- try{await makePlayer(q.bytes,activeSub);updateTrack();await play()}catch(e){status("Subtune error: "+e.message)}
+ try{await makePlayer(q.bytes,activeSub);updateTrack();await play()}catch(e){status("Subtune error: "+String(e && (e.stack || e.message || e)))}
 }
 function stepSong(n){if(queue.length)load((current+n+queue.length)%queue.length,true)}
 $('files').onchange=async e=>{for(const f of [...e.target.files])if(f.name.toLowerCase().endsWith(".sid"))queue.push({file:f,bytes:null,h:null});renderList();if(current<0&&queue.length)await load(0,false);e.target.value=""};
