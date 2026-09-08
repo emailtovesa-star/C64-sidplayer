@@ -25,7 +25,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">FAST SEEK + LOOP · V3.7.1</div>
+<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">SAFE SEEK + LOOP · V3.7.2</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
@@ -41,11 +41,11 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 <label class="load">ADD .SID FILES<input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream"></label>
 <div class="list" id="list"><div class="item">No tunes loaded.</div></div>
 <div class="status" id="status">Starting worker + native AudioTrack pipeline…</div>
-<div class="badge">Dedicated SID worker · Native Android AudioTrack · Accelerated ±10s seek · Loop current SID</div>
+<div class="badge">Dedicated SID worker · Native Android AudioTrack · Smooth ±10s seek · Loop current SID</div>
 </div></div>
 
 <script type="module">
-let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, positionSec=0, loopOne=false;
+let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, positionSec=0, loopOne=false, seekingNow=false, seekResume=false;
 let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false;
 const $=id=>document.getElementById(id), status=s=>$("status").textContent=s;
 const toBase64=(buf)=>{
@@ -123,6 +123,17 @@ function startWorker(){
       positionSec=0;
       updateTime();
       status("Looped current SID from the start.");
+    }else if(m.type==="seekReady"){
+      positionSec=Number(m.seconds)||positionSec;
+      // Now that the emulated target state exists, discard the old native
+      // PCM queue. This avoids a long silent gap while the seek is computed.
+      android("resetAudioOutput");
+      pcmGeneration++;
+      seekingNow=false;
+      $("rewind").disabled=false;
+      $("forward").disabled=false;
+      updateTime();
+      status("Seek complete.");
     }else if(m.type==="error"){
       status("ENGINE ERROR: "+m.message);
     }
@@ -170,14 +181,15 @@ function stop(){
   status("Stopped");
 }
 function seekBy(delta){
-  if(current<0||!workerReady)return;
+  if(current<0||!workerReady||seekingNow)return;
   const target=Math.max(0,positionSec+delta);
-  const resume=playing;
-  playing=false;
-  pcmGeneration++;
-  android("resetAudioOutput");
-  worker.postMessage({type:"seek",seconds:target,resume,pcmGeneration});
-  if(resume) playing=true;
+  seekResume=playing;
+  seekingNow=true;
+  $("rewind").disabled=true;
+  $("forward").disabled=true;
+  // Stop generation in the SID worker, but let Android finish the small
+  // amount of PCM already buffered. We flush only when the target is ready.
+  worker.postMessage({type:"seek",seconds:target,resume:seekResume,pcmGeneration});
   status((delta<0?"Rewinding ":"Forwarding ")+Math.abs(delta)+" seconds…");
 }
 function toggleLoopOne(){

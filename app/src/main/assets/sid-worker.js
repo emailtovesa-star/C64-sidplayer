@@ -91,18 +91,19 @@ async function fastSeekTo(targetSeconds){
     await restartAtStart();
   }
 
-  // Fast seek: run the emulator in large chunks instead of normal playback-size
-  // chunks. 1,000,000 C64 cycles is roughly one second of emulated time, so
-  // this is dramatically faster than the old 32K-cycle seek loop.
-  const FAST_CYCLES=1000000;
+  // Safe accelerated seek. V3.7.1 used 1,000,000-cycle render calls; on
+  // phones those calls can monopolize the WASM worker long enough to starve
+  // playback. 131,072 cycles is still ~4x larger than V3.7, but short enough
+  // to keep Android audio responsive.
+  const FAST_CYCLES=131072;
   let iterations=0;
   while(positionSeconds()+0.01 < target){
     let pcm=player.render(FAST_CYCLES);
     if(!pcm || pcm.length===0) throw new Error("Renderer returned no audio while seeking");
     elapsedFrames += pcm.length/channels;
-    // Keep the worker responsive without slowing every seek step.
-    if((++iterations % 8)===0) await new Promise(r=>setTimeout(r,0));
+    if((++iterations % 12)===0) await new Promise(r=>setTimeout(r,1));
   }
+  post("seekReady",{seconds:positionSeconds(),loopOne,loopSeconds:LOOP_SECONDS});
   reportPosition({seeking:false});
 }
 
