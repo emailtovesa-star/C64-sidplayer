@@ -1,4 +1,4 @@
-name: Build Android APK V3.4
+name: Build Android APK V3.9
 on:
   workflow_dispatch:
   push:
@@ -9,12 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
@@ -25,21 +23,19 @@ jobs:
           curl -fL https://raw.githubusercontent.com/chrisgleissner/libsidplayfp-wasm/main/dist/libsidplayfp.js -o app/src/main/assets/sid/libsidplayfp.js
           curl -fL https://raw.githubusercontent.com/chrisgleissner/libsidplayfp-wasm/main/dist/libsidplayfp.wasm -o app/src/main/assets/sid/libsidplayfp.wasm
 
-      - name: Prove V3.4 asset-loader build
+      - name: Bundle HVSC Songlengths database
         run: |
-  
-    
-  
-        
-  
+          curl -fL https://raw.githubusercontent.com/mickeyl/retrotunes/main/HVSC/C64Music/DOCUMENTS/Songlengths.md5 -o app/src/main/assets/Songlengths.md5
+          test -s app/src/main/assets/Songlengths.md5
+          grep -q '^\[Database\]' app/src/main/assets/Songlengths.md5
 
       - name: Build debug APK
         run: gradle :app:assembleDebug
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk C64-SID-Player-V3.4.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk C64-SID-Player-V3.9.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: C64-SID-Player-V3.4-APK
-          path: C64-SID-Player-V3.4.apk
+          name: C64-SID-Player-V3.9-APK
+          path: C64-SID-Player-V3.9.apk
