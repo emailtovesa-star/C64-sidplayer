@@ -25,7 +25,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">PERFORMANCE EDITION · V3.6.1</div>
+<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">PERFORMANCE EDITION · V3.6.2</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
@@ -102,7 +102,7 @@ function startWorker(){
       const gen = m.generation ?? pcmGeneration;
       if (gen !== pcmGeneration) return;
       const b64=toBase64(m.buffer);
-      android("enqueuePcm", gen, b64);
+      android("enqueuePcm", b64);
     }else if(m.type==="error"){
       status("ENGINE ERROR: "+m.message);
     }
@@ -115,7 +115,7 @@ async function loadSong(i,autoplay=false,subOverride=null){
   if(i<0||i>=queue.length||!workerReady)return;
   pauseInternal(true);
   pcmGeneration++;
-  android("beginPcmGeneration", pcmGeneration);
+  android("resetAudioOutput");
   current=i;
   const q=queue[i], bytes=await ensureBytes(q);
   currentBytes=bytes;
