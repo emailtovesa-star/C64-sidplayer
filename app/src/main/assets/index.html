@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V3.7</title>
+<title>C64 SID Player V3.6</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -25,27 +25,26 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">SAFE SEEK + LOOP · V3.7.2</div>
+<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">STABLE LOOP EDITION · V3.8</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
 <div id="track">SUBTUNE -- / --</div>
 <div class="engine" id="engine">ENGINE: STARTING reSIDfp WORKER...</div>
-<div class="buffer" id="buffer">NATIVE BUFFER: 0 ms</div><div class="buffer" id="time">TIME: 00:00</div>
+<div class="buffer" id="buffer">NATIVE BUFFER: 0 ms</div>
 </div>
 <div class="controls">
 <button id="prevSong">|&lt; SONG</button><button id="prevSub">&lt; SUB</button><button id="play">PLAY</button><button id="pause">PAUSE</button>
 <button id="nextSub">SUB &gt;</button><button id="nextSong">SONG &gt;|</button><button id="restart">RESTART</button><button id="stop">STOP</button>
-<button id="rewind">-10 SEC</button><button id="forward">+10 SEC</button><button id="loopOne">LOOP 1: OFF</button><button id="loopNow">RESTART LOOP</button>
 </div>
 <label class="load">ADD .SID FILES<input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream"></label>
 <div class="list" id="list"><div class="item">No tunes loaded.</div></div>
 <div class="status" id="status">Starting worker + native AudioTrack pipeline…</div>
-<div class="badge">Dedicated SID worker · Native Android AudioTrack · Smooth ±10s seek · Loop current SID</div>
+<div class="badge">Dedicated SID worker · Native Android AudioTrack · Stable playback · Background prebuffer</div>
 </div></div>
 
 <script type="module">
-let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, positionSec=0, loopOne=false, seekingNow=false, seekResume=false;
+let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, loopOne=false;
 let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false;
 const $=id=>document.getElementById(id), status=s=>$("status").textContent=s;
 const toBase64=(buf)=>{
@@ -81,15 +80,6 @@ async function ensureBytes(q){
   return q.bytes;
 }
 
-function fmtTime(sec){
-  sec=Math.max(0,Math.floor(Number(sec)||0));
-  const m=Math.floor(sec/60), s=sec%60;
-  return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
-}
-function updateTime(){
-  $("time").textContent="TIME: "+fmtTime(positionSec)+(loopOne?" / 03:00 · LOOP 1":"");
-}
-
 function startWorker(){
   worker=new Worker("./sid-worker.js",{type:"module"});
   worker.onmessage=e=>{
@@ -113,27 +103,6 @@ function startWorker(){
       if (gen !== pcmGeneration) return;
       const b64=toBase64(m.buffer);
       android("enqueuePcm", b64);
-    }else if(m.type==="position"){
-      positionSec=Number(m.seconds)||0;
-      if(typeof m.loopOne==="boolean") loopOne=m.loopOne;
-      $("loopOne").textContent="LOOP 1: "+(loopOne?"ON":"OFF");
-      updateTime();
-      if(m.seeking) status("Seeking…");
-    }else if(m.type==="looped"){
-      positionSec=0;
-      updateTime();
-      status("Looped current SID from the start.");
-    }else if(m.type==="seekReady"){
-      positionSec=Number(m.seconds)||positionSec;
-      // Now that the emulated target state exists, discard the old native
-      // PCM queue. This avoids a long silent gap while the seek is computed.
-      android("resetAudioOutput");
-      pcmGeneration++;
-      seekingNow=false;
-      $("rewind").disabled=false;
-      $("forward").disabled=false;
-      updateTime();
-      status("Seek complete.");
     }else if(m.type==="error"){
       status("ENGINE ERROR: "+m.message);
     }
@@ -148,7 +117,6 @@ async function loadSong(i,autoplay=false,subOverride=null){
   pcmGeneration++;
   android("resetAudioOutput");
   current=i;
-  positionSec=0; updateTime();
   const q=queue[i], bytes=await ensureBytes(q);
   currentBytes=bytes;
   android("clearPcm");
@@ -180,27 +148,6 @@ function stop(){
   android("stopPlaybackService");
   status("Stopped");
 }
-function seekBy(delta){
-  if(current<0||!workerReady||seekingNow)return;
-  const target=Math.max(0,positionSec+delta);
-  seekResume=playing;
-  seekingNow=true;
-  $("rewind").disabled=true;
-  $("forward").disabled=true;
-  // Stop generation in the SID worker, but let Android finish the small
-  // amount of PCM already buffered. We flush only when the target is ready.
-  worker.postMessage({type:"seek",seconds:target,resume:seekResume,pcmGeneration});
-  status((delta<0?"Rewinding ":"Forwarding ")+Math.abs(delta)+" seconds…");
-}
-function toggleLoopOne(){
-  loopOne=!loopOne;
-  worker.postMessage({type:"loopOne",enabled:loopOne});
-  $("loopOne").textContent="LOOP 1: "+(loopOne?"ON":"OFF");
-  updateTime();
-  status(loopOne
-    ?"Loop 1 enabled. Current SID repeats at 03:00."
-    :"Loop 1 disabled.");
-}
 async function changeSub(delta){
   const q=queue[current]; if(!q||!q.header)return;
   const max=Math.max(1,q.header.songs||1);
@@ -229,10 +176,13 @@ $("prevSub").onclick=()=>changeSub(-1);
 $("nextSub").onclick=()=>changeSub(1);
 $("prevSong").onclick=()=>changeSong(-1);
 $("nextSong").onclick=()=>changeSong(1);
-$("rewind").onclick=()=>seekBy(-10);
-$("forward").onclick=()=>seekBy(10);
-$("loopOne").onclick=toggleLoopOne;
-$("loopNow").onclick=()=>current>=0&&loadSong(current,true,activeSub);
+
+$("loopOne").onclick=()=>{
+  loopOne=!loopOne;
+  $("loopOne").textContent="LOOP 1: "+(loopOne?"ON":"OFF");
+  status(loopOne?"Loop 1 enabled: current SID restarts at 03:00.":"Loop 1 disabled.");
+};
+$("restartLoop").onclick=()=>{ if(current>=0) loadCurrent(true); };
 
 window.onNativeFilePickerOpening=()=>{
   wasPlayingBeforePicker=playing;
@@ -257,6 +207,18 @@ window.onAndroidForeground=()=>{
 setInterval(()=>{
   const ms=android("bufferedMs");
   if(ms!==null&&ms!==undefined)$("buffer").textContent="NATIVE BUFFER: "+ms+" ms";
+},500);
+let loopStartedAt=0;
+setInterval(()=>{
+  if(playing && loopOne){
+    if(!loopStartedAt) loopStartedAt=Date.now();
+    if(Date.now()-loopStartedAt>=180000){
+      loopStartedAt=Date.now();
+      loadCurrent(true);
+    }
+  } else {
+    loopStartedAt=0;
+  }
 },500);
 </script>
 </body>
