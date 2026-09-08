@@ -1,139 +1,148 @@
-
 <!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player</title>
-
-<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/jssid.core.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/stream.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/pico.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/jssid.mos6510.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/jssid.tinysid.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/jhohertz/jsSID@develop/js/jssid.sidplayer.js"></script>
-
+<title>C64 SID Player V3.3</title>
 <style>
 :root{--bg:#080821;--panel:#221d7a;--ink:#d7d6ff;--cyan:#70edff;--pink:#ff72c7;--yellow:#ffe36e}
-*{box-sizing:border-box}
-body{margin:0;background:linear-gradient(#18145d,#080821 45%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
-.wrap{max-width:760px;margin:auto}
-h1{text-align:center;color:white;font-size:34px;margin:8px 0 0;text-shadow:3px 3px #4a45c3}
-.sub{text-align:center;color:var(--cyan);font-size:12px;margin-bottom:14px}
-.panel{background:var(--panel);border:2px solid #6864e2;border-radius:14px;padding:13px;box-shadow:0 16px 40px #0008}
-.screen{background:#020213;border:2px solid #4b47ad;border-radius:9px;padding:12px}
-#title{color:white;font-weight:bold;font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#author{color:var(--cyan);margin-top:5px}
-#release{color:var(--yellow);margin-top:4px}
-#track{color:var(--pink);margin-top:7px}
-.controls{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}
+*{box-sizing:border-box} body{margin:0;background:linear-gradient(#18145d,#080821 45%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
+.wrap{max-width:760px;margin:auto} h1{text-align:center;color:white;font-size:31px;margin:7px 0 0;text-shadow:3px 3px #4a45c3}
+.sub{text-align:center;color:var(--cyan);font-size:12px;margin-bottom:12px}.panel{background:var(--panel);border:2px solid #6864e2;border-radius:14px;padding:13px;box-shadow:0 16px 40px #0008}
+.screen{background:#020213;border:2px solid #4b47ad;border-radius:9px;padding:12px}#title{color:white;font-weight:bold;font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#author{color:var(--cyan);margin-top:5px}#release{color:var(--yellow);margin-top:4px}#track{color:var(--pink);margin-top:7px}
+.engine{margin-top:8px;color:#8cff9b;font-weight:bold}.controls{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}
 button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color:white;min-height:45px;font:bold 13px monospace;padding:8px}
-.load{display:flex;align-items:center;justify-content:center;margin-top:10px}
-input[type=file]{display:none}
-.list{margin-top:10px;background:#08072c;border:1px solid #4e49ae;border-radius:8px;max-height:250px;overflow:auto}
-.item{padding:9px;border-bottom:1px solid #292668}
-.item.current{background:#302a92}.item:last-child{border-bottom:0}
-.status{margin-top:10px;background:#09082d;padding:9px;border-radius:8px;font-size:11px}
+.load{display:flex;align-items:center;justify-content:center;margin-top:10px} input[type=file]{display:none}
+.list{margin-top:10px;background:#08072c;border:1px solid #4e49ae;border-radius:8px;max-height:220px;overflow:auto}
+.item{padding:9px;border-bottom:1px solid #292668}.item.current{background:#302a92}.item:last-child{border-bottom:0}
+.status{margin-top:10px;background:#09082d;padding:9px;border-radius:8px;font-size:11px;white-space:pre-wrap}
+.roms{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}.roms label{font-size:10px;text-align:center;background:#12104b;border:1px solid #6864e2;padding:7px;border-radius:7px}
 @media(max-width:520px){.controls{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
-<div class="wrap">
-<h1>C64 SID PLAYER</h1>
-<div class="sub">ANDROID SIMPLE BUILD · V3.1</div>
+<div class="wrap"><h1>C64 SID PLAYER</h1><div class="sub">HIGH COMPATIBILITY · V3.3</div>
 <div class="panel">
- <div class="screen">
-  <div id="title">NO SID LOADED</div>
-  <div id="author">ADD SID FILES</div>
-  <div id="release">&nbsp;</div>
-  <div id="track">SUBTUNE -- / --</div>
- </div>
-
- <div class="controls">
-  <button id="prevSong">|&lt; SONG</button>
-  <button id="prevSub">&lt; SUB</button>
-  <button id="play">PLAY</button>
-  <button id="pause">PAUSE</button>
-  <button id="nextSub">SUB &gt;</button>
-  <button id="nextSong">SONG &gt;|</button>
-  <button id="restart">RESTART</button>
-  <button id="stop">STOP</button>
- </div>
-
- <label class="load">ADD .SID FILES
-  <input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream">
- </label>
-
- <div class="list" id="list"><div class="item">No tunes loaded.</div></div>
- <div class="status" id="status">Ready. This simplified build needs internet access to load the jsSID playback engine.</div>
+<div class="screen"><div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div><div id="track">SUBTUNE -- / --</div><div class="engine" id="engine">ENGINE: STARTING reSIDfp...</div></div>
+<div class="controls"><button id="prevSong">|&lt; SONG</button><button id="prevSub">&lt; SUB</button><button id="play">PLAY</button><button id="pause">PAUSE</button><button id="nextSub">SUB &gt;</button><button id="nextSong">SONG &gt;|</button><button id="restart">RESTART</button><button id="stop">STOP</button></div>
+<label class="load">ADD .SID FILES<input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream"></label>
+<div class="roms">
+<label>KERNAL ROM<input id="kernal" type="file" accept=".bin,application/octet-stream"></label>
+<label>BASIC ROM<input id="basic" type="file" accept=".bin,application/octet-stream"></label>
+<label>CHARGEN ROM<input id="chargen" type="file" accept=".bin,application/octet-stream"></label>
 </div>
-</div>
+<div class="list" id="list"><div class="item">No tunes loaded.</div></div><div class="status" id="status">Initializing libsidplayfp/reSIDfp…</div>
+</div></div>
+<script type="module">
+import createLibsidplayfp from "./sid/libsidplayfp.js";
 
-<script>
-let queue=[], current=-1, player=null, activeSub=0, playing=false;
-const $=x=>document.getElementById(x);
-const status=s=>$('status').textContent=s;
+let module=null, player=null, queue=[], current=-1, activeSub=0, playing=false;
+let audio=null, nextTime=0, pumpTimer=null, generation=0;
+let roms={kernal:null,basic:null,chargen:null};
+const $=x=>document.getElementById(x), status=s=>$('status').textContent=s;
 const clean=s=>String(s||'').replace(/\0/g,'').trim();
 
-async function toBinary(file){
- const a=new Uint8Array(await file.arrayBuffer()); let out='',chunk=8192;
- for(let i=0;i<a.length;i+=chunk) out+=String.fromCharCode.apply(null,a.subarray(i,i+chunk));
- return out;
+async function initEngine(){
+ try{
+   module=await createLibsidplayfp({locateFile:(asset)=>new URL("./sid/"+asset,location.href).href});
+   const test=new module.SidPlayerContext();
+   if(!test.configure(44100,true)) throw new Error(test.getLastError());
+   const name=(typeof module.getSidEngineName==="function")?module.getSidEngineName():"reSIDfp";
+   test.delete();
+   $('engine').textContent="ENGINE: "+name+" · libsidplayfp";
+   status("reSIDfp ready. Add SID files.");
+ }catch(e){ $('engine').textContent="ENGINE ERROR"; status("Engine error: "+e.message); }
 }
-function render(){
- $('list').innerHTML='';
+await initEngine();
+
+async function fileBytes(f){return new Uint8Array(await f.arrayBuffer())}
+function parseHeader(a){
+ const ascii=(o,n)=>clean(String.fromCharCode(...a.slice(o,o+n)));
+ if(a.length<0x76)return {name:"",author:"",release:"",songs:1,start:1};
+ return {name:ascii(0x16,32),author:ascii(0x36,32),release:ascii(0x56,32),
+ songs:(a[0x0e]<<8)|a[0x0f],start:(a[0x10]<<8)|a[0x11]};
+}
+function renderList(){
+ $('list').innerHTML="";
  if(!queue.length){$('list').innerHTML='<div class="item">No tunes loaded.</div>';return}
- queue.forEach((x,i)=>{
-  const d=document.createElement('div');d.className='item '+(i===current?'current':'');
-  d.textContent=x.file.name;d.onclick=()=>load(i,true);$('list').appendChild(d);
- });
+ queue.forEach((x,i)=>{let d=document.createElement("div");d.className="item "+(i===current?"current":"");d.textContent=x.file.name;d.onclick=()=>load(i,true);$('list').appendChild(d)});
+}
+function stopAudio(){
+ playing=false; generation++; if(pumpTimer){clearTimeout(pumpTimer);pumpTimer=null}
+ if(audio){try{audio.close()}catch(e){} audio=null}
+}
+async function makePlayer(bytes,song){
+ if(!module)throw new Error("reSIDfp engine is not ready");
+ if(player){try{player.delete()}catch(e){} player=null}
+ player=new module.SidPlayerContext();
+ if(!player.configure(44100,true))throw new Error(player.getLastError());
+ if(typeof player.setEmulationConfig==="function"){
+   player.setEmulationConfig({sidModel:"MOS6581",forceSidModel:false,digiBoost:true});
+ }
+ if(roms.kernal||roms.basic||roms.chargen){
+   if(!player.setSystemROMs(roms.kernal,roms.basic,roms.chargen))throw new Error("ROM: "+player.getLastError());
+ }
+ // Select subtune by patching PSID/RSID startSong field before loading.
+ let patched=bytes.slice(), songs=Math.max(1,(patched[0x0e]<<8)|patched[0x0f]);
+ let s=Math.max(0,Math.min(songs-1,song));
+ patched[0x10]=((s+1)>>8)&255; patched[0x11]=(s+1)&255;
+ if(!player.loadSidBuffer(patched))throw new Error(player.getLastError());
+ if(typeof player.reset==="function" && !player.reset())throw new Error(player.getLastError());
+ return s;
 }
 async function load(i,autoplay){
  if(i<0||i>=queue.length)return;
- current=i;
+ stopAudio(); current=i;
  try{
-   const q=queue[i];
-   if(!q.bin)q.bin=await toBinary(q.file);
-   if(typeof jsSID==='undefined')throw new Error('SID engine not loaded. Check internet connection.');
-   if(player)try{player.stop()}catch(e){}
-   player=new jsSID.SIDPlayer({quality:jsSID.quality.low,model:0,clock:985248});
-   player.loadFileFromData(q.bin);
-   const f=player.getSidFile();
-   activeSub=f.startsong||0;
-   update();
-   render();
-   status('Loaded '+q.file.name);
-   if(autoplay)play();
- }catch(e){status('Error: '+e.message)}
+   let q=queue[i]; if(!q.bytes)q.bytes=await fileBytes(q.file); q.h=q.h||parseHeader(q.bytes);
+   activeSub=await makePlayer(q.bytes,q.h.start?Math.max(0,q.h.start-1):0);
+   $('title').textContent=q.h.name||q.file.name;$('author').textContent="BY "+(q.h.author||"UNKNOWN");
+   $('release').textContent=q.h.release||"RELEASE INFO UNKNOWN"; updateTrack();renderList();
+   status("Loaded "+q.file.name+" with reSIDfp");
+   if(autoplay)await play();
+ }catch(e){status("Load error: "+e.message)}
 }
-function update(){
- if(!player||!player.getSidFile())return;
- const f=player.getSidFile();
- $('title').textContent=clean(f.name)||queue[current].file.name;
- $('author').textContent='BY '+(clean(f.author)||'UNKNOWN');
- $('release').textContent=clean(f.published)||'RELEASE INFO UNKNOWN';
- activeSub=f.currentsong||0;
- $('track').textContent='SUBTUNE '+(activeSub+1)+' / '+((f.subsongs||0)+1);
+function updateTrack(){let h=queue[current]?.h;if(h)$('track').textContent="SUBTUNE "+(activeSub+1)+" / "+Math.max(1,h.songs)}
+async function play(){
+ if(current<0){if(queue.length)await load(0,true);return}
+ if(!player){await load(current,false);if(!player)return}
+ try{
+  stopAudio(); // player remains; only closes prior WebAudio
+  audio=new (window.AudioContext||window.webkitAudioContext)({sampleRate:44100});
+  await audio.resume(); playing=true; nextTime=audio.currentTime+0.06; const mygen=++generation;
+  status("Playing · reSIDfp");
+  pump(mygen);
+ }catch(e){status("Audio error: "+e.message)}
 }
-function play(){if(!player){if(queue.length)load(0,true);return}player.play();playing=true;status('Playing')}
-function pause(){if(player)player.stop();playing=false;status('Paused')}
-function changeSub(n){
- if(!player||!player.getSidFile())return;
- let max=player.getSidFile().subsongs||0;
- activeSub=Math.max(0,Math.min(max,activeSub+n));
- player.changeTrack(activeSub);update();play();
+function pump(gen){
+ if(!playing||gen!==generation||!player||!audio)return;
+ try{
+  while(nextTime<audio.currentTime+0.30){
+    let pcm=player.render(4096);
+    if(!pcm||pcm.length===0){status("Renderer returned no audio. This tune may require C64 ROMs.");playing=false;return}
+    pcm=pcm.slice();
+    let channels=player.getChannels?player.getChannels():2;
+    let frames=Math.floor(pcm.length/channels);
+    let b=audio.createBuffer(channels,frames,44100);
+    for(let c=0;c<channels;c++){let out=b.getChannelData(c);for(let n=0;n<frames;n++)out[n]=pcm[n*channels+c]/32768}
+    let s=audio.createBufferSource();s.buffer=b;s.connect(audio.destination);s.start(nextTime);nextTime+=frames/44100;
+  }
+  pumpTimer=setTimeout(()=>pump(gen),40);
+ }catch(e){playing=false;status("Playback error: "+e.message)}
+}
+async function selectSub(n){
+ if(current<0)return; let q=queue[current], max=Math.max(1,q.h.songs);
+ activeSub=Math.max(0,Math.min(max-1,activeSub+n)); stopAudio();
+ try{await makePlayer(q.bytes,activeSub);updateTrack();await play()}catch(e){status("Subtune error: "+e.message)}
 }
 function stepSong(n){if(queue.length)load((current+n+queue.length)%queue.length,true)}
-
-$('files').onchange=e=>{
- for(const f of [...e.target.files]) if(f.name.toLowerCase().endsWith('.sid'))queue.push({file:f,bin:null});
- render();if(current<0&&queue.length)load(0,false);e.target.value='';
-};
-$('play').onclick=play;$('pause').onclick=pause;
-$('prevSub').onclick=()=>changeSub(-1);$('nextSub').onclick=()=>changeSub(1);
-$('prevSong').onclick=()=>stepSong(-1);$('nextSong').onclick=()=>stepSong(1);
-$('restart').onclick=()=>{if(player){player.changeTrack(activeSub);play()}};
-$('stop').onclick=()=>{if(player){player.stop();player.changeTrack(activeSub)}playing=false;status('Stopped')};
+$('files').onchange=async e=>{for(const f of [...e.target.files])if(f.name.toLowerCase().endsWith(".sid"))queue.push({file:f,bytes:null,h:null});renderList();if(current<0&&queue.length)await load(0,false);e.target.value=""};
+$('play').onclick=()=>play();$('pause').onclick=()=>{stopAudio();status("Paused")};$('stop').onclick=()=>{stopAudio();if(current>=0)load(current,false);status("Stopped")};
+$('restart').onclick=async()=>{if(current>=0){stopAudio();await makePlayer(queue[current].bytes,activeSub);await play()}};
+$('prevSub').onclick=()=>selectSub(-1);$('nextSub').onclick=()=>selectSub(1);$('prevSong').onclick=()=>stepSong(-1);$('nextSong').onclick=()=>stepSong(1);
+for(const [id,key,size] of [["kernal","kernal",8192],["basic","basic",8192],["chargen","chargen",4096]]){
+ $(id).onchange=async e=>{let f=e.target.files[0];if(!f)return;let b=await fileBytes(f);if(b.length!==size){status(id.toUpperCase()+" ROM must be "+size+" bytes.");return}roms[key]=b;status(id.toUpperCase()+" ROM loaded. Reload SID to apply.");};
+}
 </script>
-</body>
-</html>
+</body></html>
