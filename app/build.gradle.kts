@@ -6,8 +6,8 @@ android {
         applicationId = "com.example.c64sidplayersimple"
         minSdk = 23
         targetSdk = 35
-        versionCode = 396
-        versionName = "3.9.6"
+        versionCode = 397
+        versionName = "3.9.7"
     }
 }
 dependencies { implementation("androidx.webkit:webkit:1.12.1") }
