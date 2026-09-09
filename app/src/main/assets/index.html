@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.2</title>
+<title>C64 SID Player V4.0.3</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -47,7 +47,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><button id="infoBtn" class="infoBtn" aria-label="Information">i</button><h1>C64 SID PLAYER</h1><div class="sub">V4.0.2</div>
+<div class="wrap"><button id="infoBtn" class="infoBtn" aria-label="Information">i</button><h1>C64 SID PLAYER</h1><div class="sub">V4.0.3</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
@@ -96,42 +96,86 @@ function android(fn,...args){
   }catch(e){}
   return null;
 }
-
-const PLAYLIST_DB="c64_sid_player_playlist_v1";
-const PLAYLIST_STORE="state";
+const PLAYLIST_DB="c64_sid_player_playlist_v2";
+const PLAYLIST_DB_VERSION=1;
+const PLAYLIST_META_STORE="meta";
+const PLAYLIST_TRACK_STORE="tracks";
 
 function openPlaylistDb(){
   return new Promise((resolve,reject)=>{
-    const req=indexedDB.open(PLAYLIST_DB,1);
+    const req=indexedDB.open(PLAYLIST_DB,PLAYLIST_DB_VERSION);
     req.onupgradeneeded=()=>{
       const db=req.result;
-      if(!db.objectStoreNames.contains(PLAYLIST_STORE)) db.createObjectStore(PLAYLIST_STORE);
+      if(!db.objectStoreNames.contains(PLAYLIST_META_STORE)) db.createObjectStore(PLAYLIST_META_STORE);
+      if(!db.objectStoreNames.contains(PLAYLIST_TRACK_STORE)) db.createObjectStore(PLAYLIST_TRACK_STORE);
     };
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error);
   });
 }
 
+function idbTxDone(tx){
+  return new Promise((resolve,reject)=>{
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error||new Error("IndexedDB transaction failed"));
+    tx.onabort=()=>reject(tx.error||new Error("IndexedDB transaction aborted"));
+  });
+}
+
 async function savePlaylist(){
   try{
-    const items=[];
-    for(const q of queue){
-      const bytes=await ensureBytes(q);
-      items.push({
-        name:q.file.name,
-        bytes:bytes.slice().buffer
-      });
-    }
+    status("Saving playlist: 0 / "+queue.length+"...");
     const db=await openPlaylistDb();
-    await new Promise((resolve,reject)=>{
-      const tx=db.transaction(PLAYLIST_STORE,"readwrite");
-      tx.objectStore(PLAYLIST_STORE).put({items,savedAt:Date.now()},"last");
-      tx.oncomplete=resolve;
-      tx.onerror=()=>reject(tx.error);
-    });
+
+    // Clear old track records first.
+    {
+      const tx=db.transaction([PLAYLIST_TRACK_STORE,PLAYLIST_META_STORE],"readwrite");
+      tx.objectStore(PLAYLIST_TRACK_STORE).clear();
+      tx.objectStore(PLAYLIST_META_STORE).delete("last");
+      await idbTxDone(tx);
+    }
+
+    // Store each SID as its own IndexedDB record.
+    // This avoids one huge structured-clone object, which can fail with large playlists.
+    const BATCH=20;
+    for(let base=0;base<queue.length;base+=BATCH){
+      const end=Math.min(queue.length,base+BATCH);
+      const prepared=[];
+      for(let i=base;i<end;i++){
+        const q=queue[i];
+        const bytes=await ensureBytes(q);
+        prepared.push({
+          index:i,
+          name:q.file.name,
+          bytes:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)
+        });
+      }
+
+      const tx=db.transaction(PLAYLIST_TRACK_STORE,"readwrite");
+      const store=tx.objectStore(PLAYLIST_TRACK_STORE);
+      for(const item of prepared) store.put(item,item.index);
+      await idbTxDone(tx);
+
+      status("Saving playlist: "+end+" / "+queue.length+"...");
+      // Yield briefly so Android WebView stays responsive with very large playlists.
+      await new Promise(r=>setTimeout(r,0));
+    }
+
+    {
+      const tx=db.transaction(PLAYLIST_META_STORE,"readwrite");
+      tx.objectStore(PLAYLIST_META_STORE).put({
+        count:queue.length,
+        savedAt:Date.now(),
+        format:2
+      },"last");
+      await idbTxDone(tx);
+    }
+
     db.close();
+    status("Playlist saved: "+queue.length+" SID file"+(queue.length===1?"":"s")+".");
   }catch(e){
     console.warn("Playlist save failed",e);
+    status("Playlist save failed: "+(e&&e.message?e.message:String(e)));
   }
 }
 
@@ -140,35 +184,71 @@ async function restorePlaylist(){
   playlistRestored=true;
   try{
     const db=await openPlaylistDb();
-    const saved=await new Promise((resolve,reject)=>{
-      const tx=db.transaction(PLAYLIST_STORE,"readonly");
-      const req=tx.objectStore(PLAYLIST_STORE).get("last");
+
+    const meta=await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PLAYLIST_META_STORE,"readonly");
+      const req=tx.objectStore(PLAYLIST_META_STORE).get("last");
       req.onsuccess=()=>resolve(req.result||null);
       req.onerror=()=>reject(req.error);
     });
-    db.close();
-    if(!saved||!Array.isArray(saved.items)||!saved.items.length)return;
 
-    queue=[];
-    for(const it of saved.items){
-      if(!it||!it.name||!it.bytes)continue;
-      const stored=it.bytes.slice(0);
-      const fileLike={
-        name:it.name,
-        arrayBuffer:async()=>stored.slice(0)
-      };
-      queue.push({
-        file:fileLike,
-        bytes:new Uint8Array(stored),
-        header:null
-      });
+    if(!meta||!Number.isFinite(Number(meta.count))||Number(meta.count)<=0){
+      db.close();
+      return;
     }
+
+    const count=Number(meta.count);
+    const restored=[];
+    const BATCH=30;
+
+    for(let base=0;base<count;base+=BATCH){
+      const end=Math.min(count,base+BATCH);
+      const batch=await new Promise((resolve,reject)=>{
+        const tx=db.transaction(PLAYLIST_TRACK_STORE,"readonly");
+        const store=tx.objectStore(PLAYLIST_TRACK_STORE);
+        const out=new Array(end-base);
+        let remaining=end-base;
+        if(remaining===0){resolve([]);return;}
+        for(let i=base;i<end;i++){
+          const req=store.get(i);
+          req.onsuccess=()=>{
+            out[i-base]=req.result||null;
+            if(--remaining===0)resolve(out);
+          };
+          req.onerror=()=>reject(req.error);
+        }
+      });
+
+      for(const it of batch){
+        if(!it||!it.name||!it.bytes)continue;
+        const stored=it.bytes.slice(0);
+        const fileLike={
+          name:it.name,
+          arrayBuffer:async()=>stored.slice(0)
+        };
+        restored.push({
+          file:fileLike,
+          bytes:new Uint8Array(stored),
+          header:null
+        });
+      }
+
+      status("Restoring playlist: "+Math.min(end,count)+" / "+count+"...");
+      await new Promise(r=>setTimeout(r,0));
+    }
+
+    db.close();
+    queue=restored;
     current=-1;
     activeSub=0;
     renderList();
-    if(queue.length) status("Restored last playlist: "+queue.length+" SID file"+(queue.length===1?"":"s")+".");
+
+    if(queue.length){
+      status("Restored last playlist: "+queue.length+" SID file"+(queue.length===1?"":"s")+".");
+    }
   }catch(e){
     console.warn("Playlist restore failed",e);
+    status("Playlist restore failed: "+(e&&e.message?e.message:String(e)));
   }
 }
 
