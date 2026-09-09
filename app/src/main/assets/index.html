@@ -366,7 +366,7 @@ function startWorker(){
       $("author").textContent="BY "+(m.header.author||"UNKNOWN");
       $("release").textContent=m.header.release||"RELEASE INFO UNKNOWN";
       updateTrack(); renderList();
-      status("Loaded with worker. Press PLAY.");
+      status("");
     }else if(m.type==="duration"){
       const sec=Number(m.seconds);
       durationSec=(Number.isFinite(sec)&&sec>0)?sec:null;
