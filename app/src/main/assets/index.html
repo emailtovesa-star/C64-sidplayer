@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.1</title>
+<title>C64 SID Player V4.0.2</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -47,7 +47,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><button id="infoBtn" class="infoBtn" aria-label="Information">i</button><h1>C64 SID PLAYER</h1><div class="sub">V4.0.1</div>
+<div class="wrap"><button id="infoBtn" class="infoBtn" aria-label="Information">i</button><h1>C64 SID PLAYER</h1><div class="sub">V4.0.2</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
@@ -80,7 +80,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, loopOne=false;
 let durationSec=null, playStartedAt=0, accumulatedPlaySec=0;
 let audioClockAvailable=false;
-let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false;
+let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false, playlistRestored=false;
 const $=id=>document.getElementById(id), status=s=>$("status").textContent=s;
 const nativeAndroid=!!(window.AndroidPlayer&&typeof window.AndroidPlayer.nativeLoadSid==="function");
 const toBase64=(buf)=>{
@@ -96,6 +96,82 @@ function android(fn,...args){
   }catch(e){}
   return null;
 }
+
+const PLAYLIST_DB="c64_sid_player_playlist_v1";
+const PLAYLIST_STORE="state";
+
+function openPlaylistDb(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(PLAYLIST_DB,1);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains(PLAYLIST_STORE)) db.createObjectStore(PLAYLIST_STORE);
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+
+async function savePlaylist(){
+  try{
+    const items=[];
+    for(const q of queue){
+      const bytes=await ensureBytes(q);
+      items.push({
+        name:q.file.name,
+        bytes:bytes.slice().buffer
+      });
+    }
+    const db=await openPlaylistDb();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PLAYLIST_STORE,"readwrite");
+      tx.objectStore(PLAYLIST_STORE).put({items,savedAt:Date.now()},"last");
+      tx.oncomplete=resolve;
+      tx.onerror=()=>reject(tx.error);
+    });
+    db.close();
+  }catch(e){
+    console.warn("Playlist save failed",e);
+  }
+}
+
+async function restorePlaylist(){
+  if(playlistRestored)return;
+  playlistRestored=true;
+  try{
+    const db=await openPlaylistDb();
+    const saved=await new Promise((resolve,reject)=>{
+      const tx=db.transaction(PLAYLIST_STORE,"readonly");
+      const req=tx.objectStore(PLAYLIST_STORE).get("last");
+      req.onsuccess=()=>resolve(req.result||null);
+      req.onerror=()=>reject(req.error);
+    });
+    db.close();
+    if(!saved||!Array.isArray(saved.items)||!saved.items.length)return;
+
+    queue=[];
+    for(const it of saved.items){
+      if(!it||!it.name||!it.bytes)continue;
+      const stored=it.bytes.slice(0);
+      const fileLike={
+        name:it.name,
+        arrayBuffer:async()=>stored.slice(0)
+      };
+      queue.push({
+        file:fileLike,
+        bytes:new Uint8Array(stored),
+        header:null
+      });
+    }
+    current=-1;
+    activeSub=0;
+    renderList();
+    if(queue.length) status("Restored last playlist: "+queue.length+" SID file"+(queue.length===1?"":"s")+".");
+  }catch(e){
+    console.warn("Playlist restore failed",e);
+  }
+}
+
 function renderList(){
   $("list").innerHTML="";
   if(!queue.length){$("list").innerHTML='<div class="item">No tunes loaded.</div>';return}
@@ -118,7 +194,7 @@ async function ensureBytes(q){
 
 function startWorker(){
   worker=new Worker("./sid-worker.js",{type:"module"});
-  worker.onmessage=e=>{
+  worker.onmessage=async e=>{
     const m=e.data||{};
     if(m.type==="db"){
       status(m.entries ? "HVSC database loaded: "+m.entries+" tunes." : "HVSC database failed to load.");
@@ -126,6 +202,7 @@ function startWorker(){
       workerReady=true;
       $("engine").textContent=nativeAndroid?"ENGINE: reSIDfp · NATIVE ANDROID":"ENGINE: "+m.engine+" · WORKER";
       status("reSIDfp worker ready. Native AudioTrack ready.");
+      await restorePlaylist();
     }else if(m.type==="loaded"){
       const q=queue[current];
       if(q)q.header=m.header;
@@ -258,6 +335,7 @@ $("files").onchange=async e=>{
     if(f.name.toLowerCase().endsWith(".sid")) queue.push({file:f,bytes:null,header:null});
   }
   renderList();
+  await savePlaylist();
   if(current<0&&queue.length)await loadSong(0,false);
   e.target.value="";
 };
