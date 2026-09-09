@@ -19,6 +19,7 @@ public class PlaybackService extends Service {
     private static AudioTrack audioTrack;
     private static Thread writerThread;
     private static long headBase=0;
+    private PowerManager.WakeLock wakeLock;
 
     private static long unsignedHead(AudioTrack t){
         return ((long)t.getPlaybackHeadPosition()) & 0xffffffffL;
@@ -44,8 +45,6 @@ public class PlaybackService extends Service {
     }
     public static void clearQueue(){resetOutput();}
 
-    // User PAUSE must freeze the audible AudioTrack and playback-head timer
-    // without flushing audio or resetting the current-song clock.
     public static void pauseOutput(){
         synchronized(audioLock){
             AudioTrack t=audioTrack;
@@ -55,7 +54,6 @@ public class PlaybackService extends Service {
         }
     }
 
-    // Resume exactly where PAUSE stopped. Do not change headBase.
     public static void resumeOutput(){
         synchronized(audioLock){
             AudioTrack t=audioTrack;
@@ -72,8 +70,6 @@ public class PlaybackService extends Service {
         return (int)Math.max(0,Math.min(600000,(queuedBytes.get()*1000L)/BYTES_PER_SECOND));
     }
 
-    // Actual frames consumed by AudioTrack since the current SID/subtune was loaded.
-    // This follows what the listener hears, rather than the worker's render-ahead clock.
     public static long getPlayedMs(){
         synchronized(audioLock){
             AudioTrack t=audioTrack;
@@ -86,7 +82,24 @@ public class PlaybackService extends Service {
         }
     }
 
-    @Override public void onCreate(){super.onCreate();createNotification();startAudio();}
+    @Override public void onCreate(){
+        super.onCreate();
+
+        // Keep the CPU awake while SID audio is active. Without this, Android
+        // can let the WebView/WASM producer sleep after the app is backgrounded,
+        // leaving only the already-buffered PCM (often about a minute).
+        try{
+            PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
+            wakeLock=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                getPackageName()+":SIDPlayback");
+            wakeLock.setReferenceCounted(false);
+            wakeLock.acquire();
+        }catch(Throwable ignored){}
+
+        createNotification();
+        startAudio();
+    }
+
     private void createNotification(){
         NotificationManager nm=getSystemService(NotificationManager.class);
         if(Build.VERSION.SDK_INT>=26){
@@ -101,6 +114,7 @@ public class PlaybackService extends Service {
          .setSmallIcon(android.R.drawable.ic_media_play).setContentIntent(pi).setOngoing(true);
         startForeground(ID,b.build());
     }
+
     private AudioTrack makeTrack(){
         int min=AudioTrack.getMinBufferSize(SAMPLE_RATE,AudioFormat.CHANNEL_OUT_STEREO,AudioFormat.ENCODING_PCM_16BIT);
         int bufferSize=Math.max(min*4,SAMPLE_RATE*CHANNELS*BYTES_PER_SAMPLE);
@@ -110,6 +124,7 @@ public class PlaybackService extends Service {
             .setSampleRate(SAMPLE_RATE).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build();
         return new AudioTrack(attrs,fmt,bufferSize,AudioTrack.MODE_STREAM,android.media.AudioManager.AUDIO_SESSION_ID_GENERATE);
     }
+
     private void startAudio(){
         if(running)return;running=true;
         synchronized(audioLock){audioTrack=makeTrack();needsPlay=true;headBase=unsignedHead(audioTrack);}
@@ -132,6 +147,7 @@ public class PlaybackService extends Service {
             }
         },"SID-AudioWriter");writerThread.start();
     }
+
     private void stopAudio(){
         running=false;if(writerThread!=null)writerThread.interrupt();writerThread=null;
         queue.clear();queuedBytes.set(0);
@@ -146,7 +162,26 @@ public class PlaybackService extends Service {
             needsPlay=true;headBase=0;
         }
     }
-    @Override public int onStartCommand(Intent intent,int flags,int startId){if(!running)startAudio();return START_STICKY;}
-    @Override public void onDestroy(){stopAudio();super.onDestroy();}
+
+    @Override public int onStartCommand(Intent intent,int flags,int startId){
+        if(!running)startAudio();
+        return START_STICKY;
+    }
+
+    @Override public void onTaskRemoved(Intent rootIntent){
+        // The media foreground service remains active even if the UI task leaves
+        // the foreground. START_STICKY allows Android to recreate it if needed.
+        super.onTaskRemoved(rootIntent);
+    }
+
+    @Override public void onDestroy(){
+        stopAudio();
+        try{
+            if(wakeLock!=null&&wakeLock.isHeld())wakeLock.release();
+        }catch(Throwable ignored){}
+        wakeLock=null;
+        super.onDestroy();
+    }
+
     @Override public IBinder onBind(Intent intent){return null;}
 }

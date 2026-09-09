@@ -25,7 +25,17 @@ public class MainActivity extends Activity {
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        web = new WebView(this); setContentView(web);
+        web = new WebView(this);
+        setContentView(web);
+
+        // SID rendering still runs inside the WebView worker. Keep its renderer
+        // important when the Activity moves to the background.
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            try {
+                web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+            } catch (Throwable ignored) {}
+        }
+
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true);
         s.setAllowFileAccess(true); s.setAllowContentAccess(true);
