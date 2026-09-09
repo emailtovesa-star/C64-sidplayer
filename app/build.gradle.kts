@@ -10,8 +10,8 @@ android {
         applicationId = "com.example.c64sidplayersimple"
         minSdk = 24
         targetSdk = 35
-        versionCode = 394
-        versionName = "3.9.4"
+        versionCode = 395
+        versionName = "3.9.5"
     }
 }
 
