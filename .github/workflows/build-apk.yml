@@ -1,4 +1,4 @@
-name: Build Android APK V3.9
+name: Build Android APK V4.0 Native SID
 on:
   workflow_dispatch:
   push:
@@ -9,23 +9,88 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Fetch libsidplayfp reSIDfp runtime
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool pkg-config make xa65
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Cross-compile libsidplayfp + reSIDfp for Android arm64
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf native-src
+          git clone --depth 1 --branch v2.16.1 --recurse-submodules \
+            https://github.com/libsidplayfp/libsidplayfp.git native-src
+
+          export NDK="$ANDROID_SDK_ROOT/ndk/27.2.12479018"
+          export TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+          export API=23
+          export HOST=aarch64-linux-android
+          export CC="$TOOLCHAIN/bin/aarch64-linux-android${API}-clang"
+          export CXX="$TOOLCHAIN/bin/aarch64-linux-android${API}-clang++"
+          export AR="$TOOLCHAIN/bin/llvm-ar"
+          export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
+          export STRIP="$TOOLCHAIN/bin/llvm-strip"
+          export CFLAGS="-O3 -fPIC"
+          export CXXFLAGS="-O3 -fPIC -std=c++17"
+          export LDFLAGS=""
+
+          cd native-src
+          autoreconf -vfi
+          ./configure \
+            --host="$HOST" \
+            --disable-shared \
+            --enable-static \
+            --without-exsid \
+            --without-usbsid
+          make -j2
+
+          cd ..
+          mkdir -p app/src/main/cpp/prebuilt/arm64-v8a
+          mkdir -p app/src/main/cpp/prebuilt/include
+
+          cp native-src/src/.libs/libsidplayfp.a \
+             app/src/main/cpp/prebuilt/arm64-v8a/libsidplayfp.a
+
+          RESID_BUILDER="$(find native-src/src/builders/residfp-builder -name 'libsidplayfp-residfp.a' | head -1)"
+          RESID_CORE="$(find native-src/src/builders/residfp-builder -name 'libresidfp.a' | head -1)"
+          test -n "$RESID_BUILDER"
+          test -n "$RESID_CORE"
+          cp "$RESID_BUILDER" app/src/main/cpp/prebuilt/arm64-v8a/libsidplayfp-residfp.a
+          cp "$RESID_CORE" app/src/main/cpp/prebuilt/arm64-v8a/libresidfp.a
+
+          cp -R native-src/src/sidplayfp app/src/main/cpp/prebuilt/include/
+          # Public builder header path varies slightly across releases.
+          mkdir -p app/src/main/cpp/prebuilt/include/sidplayfp/builders
+          cp native-src/src/builders/residfp-builder/residfp.h \
+             app/src/main/cpp/prebuilt/include/sidplayfp/builders/residfp.h
+
+      - name: Keep WASM metadata/HVSC helper
         run: |
           mkdir -p app/src/main/assets/sid
-          curl -fL https://raw.githubusercontent.com/chrisgleissner/libsidplayfp-wasm/main/dist/libsidplayfp.js -o app/src/main/assets/sid/libsidplayfp.js
-          curl -fL https://raw.githubusercontent.com/chrisgleissner/libsidplayfp-wasm/main/dist/libsidplayfp.wasm -o app/src/main/assets/sid/libsidplayfp.wasm
+          curl -fL https://raw.githubusercontent.com/chrisgleissner/libsidplayfp-wasm/main/dist/libsidplayfp.js \
+            -o app/src/main/assets/sid/libsidplayfp.js
+          curl -fL https://raw.githubusercontent.com/chrisgleissner/libsidplayfp-wasm/main/dist/libsidplayfp.wasm \
+            -o app/src/main/assets/sid/libsidplayfp.wasm
 
       - name: Bundle HVSC Songlengths database
         run: |
-          curl -fL https://raw.githubusercontent.com/mickeyl/retrotunes/main/HVSC/C64Music/DOCUMENTS/Songlengths.md5 -o app/src/main/assets/Songlengths.md5
+          curl -fL https://raw.githubusercontent.com/mickeyl/retrotunes/main/HVSC/C64Music/DOCUMENTS/Songlengths.md5 \
+            -o app/src/main/assets/Songlengths.md5
           test -s app/src/main/assets/Songlengths.md5
           grep -q '^\[Database\]' app/src/main/assets/Songlengths.md5
 
@@ -33,9 +98,9 @@ jobs:
         run: gradle :app:assembleDebug
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk C64-SID-Player-V3.9.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk C64-SID-Player-V4.0.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: C64-SID-Player-V3.9-APK
-          path: C64-SID-Player-V3.9.apk
+          name: C64-SID-Player-V4.0-APK
+          path: C64-SID-Player-V4.0.apk
