@@ -140,7 +140,7 @@ public class PlaybackService extends Service {
         synchronized(lock){audioTrack=makeTrack();playedBaseFrames=unsignedHead(audioTrack);}
         serviceRunning=true;
         renderThread=new Thread(()->{
-            Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO);
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO);
             while(serviceRunning){
                 try{
                     synchronized(lock){
@@ -149,8 +149,6 @@ public class PlaybackService extends Service {
                     if(!serviceRunning)break;
                     if(!playing||!sidLoaded)continue;
 
-                    // If HVSC loop boundary is reached in render time, restart the
-                    // emulator before producing the next PCM block.
                     if(loopEnabled&&loopLengthMs>0){
                         long renderMs=(renderedFrames*1000L)/SAMPLE_RATE;
                         if(renderMs>=loopLengthMs){
