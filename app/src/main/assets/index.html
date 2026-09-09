@@ -572,8 +572,21 @@ function updatePlaytime(){
     if(playing&&playStartedAt) elapsed+=(performance.now()-playStartedAt)/1000;
   }
   if(durationSec){
-    if(loopOne) elapsed=elapsed%durationSec;
-    else elapsed=Math.min(elapsed,durationSec);
+    if(loopOne){
+      elapsed=elapsed%durationSec;
+    }else if(elapsed>=durationSec){
+      elapsed=durationSec;
+      // A SID tune has no inherent end signal: HVSC Songlengths defines the end.
+      // Stop native playback exactly once at that audible song length when Loop 1 is OFF.
+      if(playing){
+        if(nativeAndroid) android("nativePause");
+        else if(worker) worker.postMessage({type:"pause"});
+        playing=false;
+        accumulatedPlaySec=durationSec;
+        playStartedAt=0;
+        status("Song finished");
+      }
+    }
   }
   $("playtime").textContent="TIME: "+fmtTime(elapsed)+" / "+fmtTime(durationSec);
 }
