@@ -3,15 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V3.9.4</title>
+<title>C64 SID Player V3.9.5</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
 .wrap{max-width:760px;margin:auto;position:relative}
-.infoBtn{position:absolute;left:0;top:0;width:28px;height:28px;min-height:28px;padding:0;border:2px solid #fff1a0;border-radius:50%;background:#ffe36c;color:#211d72;font:bold 17px serif;line-height:24px;box-shadow:0 3px 8px #0008;z-index:5}
+.infoBtn{position:absolute;left:-7px;top:-7px;width:22px;height:22px;min-height:22px;padding:0;border:1px solid #fff1a0;border-radius:50%;background:#ffe36c;color:#211d72;font:bold 14px serif;line-height:20px;box-shadow:0 2px 6px #0008;z-index:5}
 .infoModal{display:none;position:fixed;inset:0;background:#000b;z-index:50;align-items:center;justify-content:center;padding:22px}
 .infoModal.show{display:flex}
-.infoBox{max-width:520px;background:#211d72;border:3px solid #ffe36c;border-radius:14px;padding:24px;color:#fff;text-align:center;box-shadow:0 16px 50px #000}
+.infoBox{position:relative;overflow:hidden;max-width:520px;min-height:170px;background:
+radial-gradient(circle at 50% 35%,#352b9a 0%,#211d72 55%,#151044 100%);
+border:3px solid #ffe36c;border-radius:14px;padding:28px 24px;color:#fff;text-align:center;
+box-shadow:0 16px 50px #000;isolation:isolate}
+.infoBox::before{content:"";position:absolute;inset:0;background:
+linear-gradient(120deg,transparent 0 35%,#ffffff10 45%,transparent 55% 100%);
+animation:infoGlow 5s linear infinite;z-index:-2}
+@keyframes infoGlow{0%{transform:translateX(-35%)}100%{transform:translateX(35%)}}
+.noteField{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:-1}
+.musicNote{position:absolute;bottom:-28px;font-weight:bold;opacity:.9;text-shadow:0 2px 5px #0008;
+animation:flyNote linear infinite}
+@keyframes flyNote{
+0%{transform:translate3d(0,0,0) rotate(-12deg) scale(.85);opacity:0}
+12%{opacity:.95}
+60%{opacity:.9}
+100%{transform:translate3d(var(--drift),-230px,0) rotate(28deg) scale(1.15);opacity:0}
+}
 .infoText{color:#ffe36c;font:bold 17px monospace;line-height:1.5}
 .infoClose{margin-top:18px;min-width:120px}h1{text-align:center;color:#fff;font-size:30px;margin:6px 0 0;text-shadow:3px 3px #4943c1}
 .sub{text-align:center;color:var(--cyan);font-size:12px;margin-bottom:11px}
@@ -31,7 +47,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><button id="infoBtn" class="infoBtn" aria-label="Information">i</button><h1>C64 SID PLAYER</h1><div class="sub">HVSC EXACT LOOP · V3.9.4</div>
+<div class="wrap"><button id="infoBtn" class="infoBtn" aria-label="Information">i</button><h1>C64 SID PLAYER</h1><div class="sub">HVSC EXACT LOOP · V3.9.5</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
@@ -55,6 +71,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </div></div>
 <div id="infoModal" class="infoModal">
   <div class="infoBox">
+    <div id="noteField" class="noteField" aria-hidden="true"></div>
     <div class="infoText">Created with ChatGPT + GitHub by Vesa Heikkinen</div>
     <button id="infoClose" class="infoClose">CLOSE</button>
   </div>
@@ -195,6 +212,27 @@ function changeSong(delta){
   if(!queue.length)return;
   loadSong((current+delta+queue.length)%queue.length,true);
 }
+
+
+const noteSymbols=["♪","♫","♬","♩","♭","♯"];
+const noteColors=["#ffe36c","#ff7aa2","#66e0ff","#8dff86","#d39bff","#ff9f43","#ffffff"];
+function seedInfoNotes(){
+  const field=$("noteField");
+  if(!field || field.children.length) return;
+  for(let i=0;i<18;i++){
+    const n=document.createElement("span");
+    n.className="musicNote";
+    n.textContent=noteSymbols[i%noteSymbols.length];
+    n.style.left=(3+Math.random()*92)+"%";
+    n.style.color=noteColors[i%noteColors.length];
+    n.style.fontSize=(14+Math.random()*18)+"px";
+    n.style.animationDuration=(3.8+Math.random()*4.6)+"s";
+    n.style.animationDelay=(-Math.random()*8)+"s";
+    n.style.setProperty("--drift",(-38+Math.random()*76)+"px");
+    field.appendChild(n);
+  }
+}
+seedInfoNotes();
 
 $("infoBtn").onclick=()=>$("infoModal").classList.add("show");
 $("infoClose").onclick=()=>$("infoModal").classList.remove("show");
