@@ -6,7 +6,9 @@
 #include <cstring>
 
 #include <sidplayfp/sidplayfp.h>
+#include <sidplayfp/SidInfo.h>
 #include <sidplayfp/SidTune.h>
+#include <sidplayfp/SidTuneInfo.h>
 #include <sidplayfp/SidConfig.h>
 #include <sidplayfp/builders/residfp.h>
 
@@ -86,7 +88,6 @@ Java_com_example_c64sidplayersimple_NativeSid_nativeRender(
     if (frames < 64) frames = 64;
     if (frames > 16384) frames = 16384;
 
-    // Stereo: 2 samples per frame.
     std::vector<short> pcm((size_t)frames * 2);
     uint_least32_t written = 0;
 
