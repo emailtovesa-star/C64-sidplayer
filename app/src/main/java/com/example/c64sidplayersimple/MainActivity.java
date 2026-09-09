@@ -79,15 +79,27 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void stopPlaybackService() {
             stopService(new Intent(MainActivity.this, PlaybackService.class));
         }
-        @JavascriptInterface public void enqueuePcm(String base64Pcm) {
-            PlaybackService.enqueueBase64(base64Pcm);
+        @JavascriptInterface public boolean nativeLoadSid(String base64Sid, int subsong) {
+            try {
+                byte[] data=android.util.Base64.decode(base64Sid,android.util.Base64.NO_WRAP);
+                return PlaybackService.loadSid(data,subsong);
+            } catch(Throwable t){ return false; }
         }
-        @JavascriptInterface public void resetAudioOutput() { PlaybackService.resetOutput(); }
-        @JavascriptInterface public void clearPcm() { PlaybackService.clearQueue(); }
-        @JavascriptInterface public void pauseAudioOutput() { PlaybackService.pauseOutput(); }
-        @JavascriptInterface public void resumeAudioOutput() { PlaybackService.resumeOutput(); }
+        @JavascriptInterface public void nativePlay() { PlaybackService.playNative(); }
+        @JavascriptInterface public void nativePause() { PlaybackService.pauseNative(); }
+        @JavascriptInterface public void nativeRestart() { PlaybackService.restartNative(); }
+        @JavascriptInterface public void nativeSetLoop(boolean enabled,long durationMs) {
+            PlaybackService.setLoop(enabled,durationMs);
+        }
         @JavascriptInterface public int bufferedMs() { return PlaybackService.getBufferedMs(); }
         @JavascriptInterface public long playedMs() { return PlaybackService.getPlayedMs(); }
+
+        // Kept as no-ops so older JS calls cannot break the native engine.
+        @JavascriptInterface public void enqueuePcm(String ignored) {}
+        @JavascriptInterface public void resetAudioOutput() {}
+        @JavascriptInterface public void clearPcm() {}
+        @JavascriptInterface public void pauseAudioOutput() { PlaybackService.pauseNative(); }
+        @JavascriptInterface public void resumeAudioOutput() { PlaybackService.playNative(); }
     }
 
     @Override protected void onPause() {
