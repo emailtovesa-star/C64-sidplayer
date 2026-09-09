@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V3.9.9</title>
+<title>C64 SID Player V4.0</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -47,14 +47,14 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </style>
 </head>
 <body>
-<div class="wrap"><button id="infoBtn" class="infoBtn" aria-label="Information">i</button><h1>C64 SID PLAYER</h1><div class="sub">HVSC EXACT LOOP · V3.9.9</div>
+<div class="wrap"><button id="infoBtn" class="infoBtn" aria-label="Information">i</button><h1>C64 SID PLAYER</h1><div class="sub">HVSC EXACT LOOP · V4.0</div>
 <div class="panel">
 <div class="screen">
 <div id="title">NO SID LOADED</div><div id="author">ADD SID FILES</div><div id="release">&nbsp;</div>
 <div id="track">SUBTUNE -- / --</div>
 <div id="duration" style="color:#8aff99;margin-top:5px">LENGTH: --:--</div>
 <div id="playtime" style="color:#69edff;margin-top:5px">TIME: 0:00 / --:--</div>
-<div class="engine" id="engine">ENGINE: STARTING reSIDfp WORKER...</div>
+<div class="engine" id="engine">ENGINE: STARTING NATIVE reSIDfp...</div>
 <div class="buffer" id="buffer">NATIVE BUFFER: 0 ms</div>
 </div>
 <div class="controls">
@@ -67,7 +67,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 <label class="load">ADD .SID FILES<input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream"></label>
 <div class="list" id="list"><div class="item">No tunes loaded.</div></div>
 <div class="status" id="status">Starting worker + native AudioTrack pipeline…</div>
-<div class="badge">Dedicated SID worker · Native Android AudioTrack · HVSC Songlengths exact loop</div>
+<div class="badge">Native Android reSIDfp engine · Background-safe AudioTrack · HVSC exact loop</div>
 </div></div>
 <div id="infoModal" class="infoModal">
   <div class="infoBox">
@@ -83,6 +83,7 @@ let durationSec=null, playStartedAt=0, accumulatedPlaySec=0;
 let audioClockAvailable=false;
 let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false;
 const $=id=>document.getElementById(id), status=s=>$("status").textContent=s;
+const nativeAndroid=!!(window.AndroidPlayer&&typeof window.AndroidPlayer.nativeLoadSid==="function");
 const toBase64=(buf)=>{
   const bytes=new Uint8Array(buf); let out=""; const CHUNK=0x8000;
   for(let i=0;i<bytes.length;i+=CHUNK) out+=String.fromCharCode(...bytes.subarray(i,i+CHUNK));
@@ -124,7 +125,7 @@ function startWorker(){
       status(m.entries ? "HVSC database loaded: "+m.entries+" tunes." : "HVSC database failed to load.");
     }else if(m.type==="ready"){
       workerReady=true;
-      $("engine").textContent="ENGINE: "+m.engine+" · WORKER";
+      $("engine").textContent=nativeAndroid?"ENGINE: reSIDfp · NATIVE ANDROID":"ENGINE: "+m.engine+" · WORKER";
       status("reSIDfp worker ready. Native AudioTrack ready.");
     }else if(m.type==="loaded"){
       const q=queue[current];
@@ -144,6 +145,7 @@ function startWorker(){
       }else{
         $("duration").textContent="LENGTH: UNKNOWN · HVSC";
       }
+      if(nativeAndroid) android("nativeSetLoop",loopOne,Math.round((durationSec||0)*1000));
       accumulatedPlaySec=0; playStartedAt=playing?performance.now():0;
       updatePlaytime();
     }else if(m.type==="looped"){
@@ -154,8 +156,10 @@ function startWorker(){
       // Generation tag prevents already-posted PCM from the previous SID being heard.
       const gen = m.generation ?? pcmGeneration;
       if (gen !== pcmGeneration) return;
-      const b64=toBase64(m.buffer);
-      android("enqueuePcm", b64);
+      if(!nativeAndroid){
+        const b64=toBase64(m.buffer);
+        android("enqueuePcm", b64);
+      }
     }else if(m.type==="error"){
       status("ENGINE ERROR: "+m.message);
     }
@@ -172,6 +176,12 @@ async function loadSong(i,autoplay=false,subOverride=null){
   current=i;
   const q=queue[i], bytes=await ensureBytes(q);
   currentBytes=bytes;
+  if(nativeAndroid){
+    android("startPlaybackService");
+    const sidB64=toBase64(bytes.buffer);
+    const nativeOk=android("nativeLoadSid",sidB64,subOverride==null?0:subOverride);
+    if(nativeOk===false) status("Native reSIDfp load failed.");
+  }
   android("clearPcm");
   const copy=bytes.slice();
   worker.postMessage({type:"load",buffer:copy.buffer,song:subOverride,pcmGeneration},[copy.buffer]);
@@ -185,21 +195,21 @@ function play(){
   if(current<0){if(queue.length)loadSong(0,true);return}
   if(!workerReady)return;
   android("startPlaybackService");
-  android("resumeAudioOutput");
+  if(nativeAndroid) android("nativePlay"); else android("resumeAudioOutput");
   if(!playing) playStartedAt=performance.now();
   playing=true;
-  worker.postMessage({type:"play"});
+  if(!nativeAndroid) worker.postMessage({type:"play"});
   status("Playing through native Android AudioTrack.");
 }
 function pauseInternal(clearNative=false){
-  if(worker)worker.postMessage({type:"pause"});
+  if(worker&&!nativeAndroid)worker.postMessage({type:"pause"});
   if(playing&&playStartedAt){ accumulatedPlaySec+=(performance.now()-playStartedAt)/1000; playStartedAt=0; }
   playing=false;
   if(clearNative)android("clearPcm");
 }
 function pause(){
   pauseInternal(false);
-  android("pauseAudioOutput");
+  if(nativeAndroid) android("nativePause"); else android("pauseAudioOutput");
   status("Paused");
 }
 function stop(){
@@ -256,7 +266,11 @@ $("files").onchange=async e=>{
 $("play").onclick=play;
 $("pause").onclick=pause;
 $("stop").onclick=stop;
-$("restart").onclick=()=>current>=0&&loadSong(current,true,activeSub);
+$("restart").onclick=()=>{
+  if(current<0)return;
+  if(nativeAndroid){ android("nativeRestart"); playing=true; status("Restarted native SID."); }
+  else loadSong(current,true,activeSub);
+};
 $("prevSub").onclick=()=>changeSub(-1);
 $("nextSub").onclick=()=>changeSub(1);
 $("prevSong").onclick=()=>changeSong(-1);
@@ -265,6 +279,7 @@ $("loopOne").onclick=()=>{
   loopOne=!loopOne;
   $("loopOne").textContent="LOOP 1: "+(loopOne?"ON":"OFF");
   if(worker) worker.postMessage({type:"loopOne",enabled:loopOne});
+  if(nativeAndroid) android("nativeSetLoop",loopOne,Math.round((durationSec||0)*1000));
   status(loopOne?"Loop 1 ON · exact HVSC duration when available.":"Loop 1 OFF");
 };
 
