@@ -44,6 +44,30 @@ public class PlaybackService extends Service {
     }
     public static void clearQueue(){resetOutput();}
 
+    // User PAUSE must freeze the audible AudioTrack and playback-head timer
+    // without flushing audio or resetting the current-song clock.
+    public static void pauseOutput(){
+        synchronized(audioLock){
+            AudioTrack t=audioTrack;
+            if(t!=null){
+                try{t.pause();}catch(Throwable ignored){}
+            }
+        }
+    }
+
+    // Resume exactly where PAUSE stopped. Do not change headBase.
+    public static void resumeOutput(){
+        synchronized(audioLock){
+            AudioTrack t=audioTrack;
+            if(t!=null){
+                try{
+                    t.play();
+                    needsPlay=false;
+                }catch(Throwable ignored){}
+            }
+        }
+    }
+
     public static int getBufferedMs(){
         return (int)Math.max(0,Math.min(600000,(queuedBytes.get()*1000L)/BYTES_PER_SECOND));
     }

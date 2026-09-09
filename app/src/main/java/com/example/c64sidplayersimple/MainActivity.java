@@ -74,6 +74,8 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void resetAudioOutput() { PlaybackService.resetOutput(); }
         @JavascriptInterface public void clearPcm() { PlaybackService.clearQueue(); }
+        @JavascriptInterface public void pauseAudioOutput() { PlaybackService.pauseOutput(); }
+        @JavascriptInterface public void resumeAudioOutput() { PlaybackService.resumeOutput(); }
         @JavascriptInterface public int bufferedMs() { return PlaybackService.getBufferedMs(); }
         @JavascriptInterface public long playedMs() { return PlaybackService.getPlayedMs(); }
     }
