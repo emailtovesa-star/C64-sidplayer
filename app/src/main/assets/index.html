@@ -571,7 +571,10 @@ function updatePlaytime(){
     elapsed=accumulatedPlaySec;
     if(playing&&playStartedAt) elapsed+=(performance.now()-playStartedAt)/1000;
   }
-  if(durationSec && loopOne) elapsed=elapsed%durationSec;
+  if(durationSec){
+    if(loopOne) elapsed=elapsed%durationSec;
+    else elapsed=Math.min(elapsed,durationSec);
+  }
   $("playtime").textContent="TIME: "+fmtTime(elapsed)+" / "+fmtTime(durationSec);
 }
 setInterval(updatePlaytime,250);
