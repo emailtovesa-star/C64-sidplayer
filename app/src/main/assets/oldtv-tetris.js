@@ -9,6 +9,9 @@ let scoreEl = null;
 let linesEl = null;
 let levelEl = null;
 let messageEl = null;
+let nextCanvas = null;
+let nextCtx = null;
+let pauseBtn = null;
 let running = false;
 let paused = false;
 let gameOver = false;
@@ -16,6 +19,7 @@ let lastDrop = 0;
 let raf = 0;
 let board = [];
 let current = null;
+let nextPiece = null;
 let score = 0;
 let lines = 0;
 let level = 1;
@@ -89,7 +93,7 @@ function addStyles(){
     }
     .otGameTop{
       display:grid;
-      grid-template-columns:1fr auto;
+      grid-template-columns:1fr auto auto;
       gap:8px;
       align-items:center;
       padding:4px 4px 0;
@@ -104,6 +108,46 @@ function addStyles(){
       font:bold clamp(10px,3vw,14px) monospace;
       line-height:1.35;
     }
+
+    .otNextBox{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:3px;
+      min-width:72px;
+      color:#69edff;
+      font:bold 10px monospace;
+      text-align:center;
+    }
+    #otNextCanvas{
+      width:56px;
+      height:56px;
+      background:#050513;
+      border:2px solid #4d48aa;
+      border-radius:6px;
+      image-rendering:pixelated;
+    }
+    .otTopButtons{
+      display:flex;
+      gap:6px;
+      align-items:center;
+    }
+    .otPause{
+      min-height:38px!important;
+      height:38px;
+      padding:4px 10px!important;
+      border:2px solid #ffe36c!important;
+      background:#4b4211!important;
+      color:#fff4a2!important;
+      font:bold 12px monospace!important;
+    }
+    .otPause.active{
+      background:#6a1b2b!important;
+      border-color:#ff8aa0!important;
+      color:#fff!important;
+    }
+
     .otExit{
       min-height:38px!important;
       height:38px;
@@ -181,7 +225,7 @@ function addStyles(){
         align-items:center;
         gap:10px;
       }
-      .otGameTop{display:flex;flex-direction:column;align-items:stretch}
+      .otGameTop{display:flex;flex-direction:column;align-items:stretch}.otNextBox{align-self:center}.otTopButtons{justify-content:center}
       .otCanvasWrap{height:100%}
       .otControls{grid-template-columns:repeat(3,1fr)}
       .otStart{grid-column:1/-1}
@@ -225,7 +269,14 @@ function makeOverlay(){
             LINES <span id="otLines">0</span> · LEVEL <span id="otLevel">1</span>
           </div>
         </div>
-        <button class="otExit" id="otExit" type="button">EXIT</button>
+        <div class="otNextBox">
+          NEXT
+          <canvas id="otNextCanvas" width="80" height="80"></canvas>
+        </div>
+        <div class="otTopButtons">
+          <button class="otPause" id="otPause" type="button">PAUSE</button>
+          <button class="otExit" id="otExit" type="button">EXIT</button>
+        </div>
       </div>
       <div class="otCanvasWrap">
         <canvas id="oldTvTetrisCanvas" width="240" height="480"></canvas>
@@ -248,8 +299,12 @@ function makeOverlay(){
   linesEl=overlay.querySelector("#otLines");
   levelEl=overlay.querySelector("#otLevel");
   messageEl=overlay.querySelector("#otMessage");
+  nextCanvas=overlay.querySelector("#otNextCanvas");
+  nextCtx=nextCanvas.getContext("2d");
+  pauseBtn=overlay.querySelector("#otPause");
 
   overlay.querySelector("#otExit").addEventListener("click",closeGame);
+  pauseBtn.addEventListener("click",togglePause);
   overlay.querySelector("#otStart").addEventListener("click",startGame);
 
   overlay.querySelectorAll("[data-act]").forEach(b=>{
@@ -318,7 +373,12 @@ function clearLines(){
 }
 
 function spawn(){
-  current=randPiece();
+  if(!nextPiece) nextPiece=randPiece();
+  current=nextPiece;
+  nextPiece=randPiece();
+  current.x=Math.floor((COLS-current.shape[0].length)/2);
+  current.y=-1;
+  drawNext();
   if(collide(current,0,1) || collide(current,0,0)){
     endGame();
   }
@@ -369,8 +429,9 @@ function actionMove(a){
 function keyHandler(e){
   if(!overlay?.classList.contains("show")) return;
   const k=e.key;
-  if(["ArrowLeft","ArrowRight","ArrowDown","ArrowUp"," ","Escape"].includes(k)) e.preventDefault();
+  if(["ArrowLeft","ArrowRight","ArrowDown","ArrowUp"," ","Escape","p","P"].includes(k)) e.preventDefault();
   if(k==="Escape"){closeGame();return;}
+  if(k==="p"||k==="P"){togglePause();return;}
   if(k==="Enter" && (!running||gameOver)){startGame();return;}
   if(k==="ArrowLeft") actionMove("left");
   if(k==="ArrowRight") actionMove("right");
@@ -396,6 +457,54 @@ function cell(x,y,c,alpha=1){
   ctx.fillStyle="rgba(0,0,0,.25)";
   ctx.fillRect(px+w-4,py+3,2,h-6);
   ctx.globalAlpha=1;
+}
+
+
+function drawNext(){
+  if(!nextCtx||!nextCanvas) return;
+  nextCtx.clearRect(0,0,nextCanvas.width,nextCanvas.height);
+  nextCtx.fillStyle="#050513";
+  nextCtx.fillRect(0,0,nextCanvas.width,nextCanvas.height);
+  if(!nextPiece) return;
+
+  const shape=nextPiece.shape;
+  const cells=Math.max(shape.length,shape[0].length,4);
+  const size=Math.floor(Math.min(nextCanvas.width,nextCanvas.height)/(cells+1));
+  const pieceW=shape[0].length*size;
+  const pieceH=shape.length*size;
+  const ox=Math.floor((nextCanvas.width-pieceW)/2);
+  const oy=Math.floor((nextCanvas.height-pieceH)/2);
+
+  shape.forEach((row,y)=>row.forEach((v,x)=>{
+    if(!v) return;
+    const px=ox+x*size, py=oy+y*size;
+    nextCtx.fillStyle=COLORS[nextPiece.color]||"#fff";
+    nextCtx.fillRect(px+1,py+1,size-2,size-2);
+    nextCtx.fillStyle="rgba(255,255,255,.22)";
+    nextCtx.fillRect(px+2,py+2,size-4,Math.max(2,Math.floor(size*.12)));
+    nextCtx.fillStyle="rgba(0,0,0,.25)";
+    nextCtx.fillRect(px+size-4,py+3,2,Math.max(2,size-6));
+  }));
+}
+
+function togglePause(){
+  if(gameOver || (!running && !paused)) return;
+  paused=!paused;
+  if(paused){
+    messageEl.innerHTML="PAUSED";
+    messageEl.classList.remove("hidden");
+    if(pauseBtn){
+      pauseBtn.textContent="RESUME";
+      pauseBtn.classList.add("active");
+    }
+  }else{
+    messageEl.classList.add("hidden");
+    lastDrop=performance.now();
+    if(pauseBtn){
+      pauseBtn.textContent="PAUSE";
+      pauseBtn.classList.remove("active");
+    }
+  }
 }
 
 function draw(){
@@ -439,9 +548,15 @@ function startGame(){
   resetBoard();
   score=0;lines=0;level=1;
   running=true;paused=false;gameOver=false;
-  current=randPiece();
+  current=null;
+  nextPiece=randPiece();
+  spawn();
   updateStats();
   messageEl.classList.add("hidden");
+  if(pauseBtn){
+    pauseBtn.textContent="PAUSE";
+    pauseBtn.classList.remove("active");
+  }
   lastDrop=performance.now();
   if(raf) cancelAnimationFrame(raf);
   raf=requestAnimationFrame(loop);
@@ -454,6 +569,7 @@ function endGame(){
   draw();
   messageEl.innerHTML=`GAME OVER<br>SCORE ${score}<br><br>PRESS START`;
   messageEl.classList.remove("hidden");
+  if(pauseBtn){pauseBtn.textContent="PAUSE";pauseBtn.classList.remove("active");}
 }
 
 function openGame(){
@@ -463,6 +579,7 @@ function openGame(){
   overlay.classList.add("show");
   overlay.setAttribute("aria-hidden","false");
   draw();
+  drawNext();
   try{
     if(document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen().catch(()=>{});
