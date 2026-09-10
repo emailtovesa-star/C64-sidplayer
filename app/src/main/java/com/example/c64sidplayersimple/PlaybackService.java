@@ -78,6 +78,43 @@ public class PlaybackService extends Service {
         }
     }
 
+    public static boolean setSidModel(int model) {
+        int wanted=(model==8580)?8580:6581;
+        PlaybackService s=instance;
+
+        // Store native preference even before the foreground service exists.
+        if(s==null){
+            try{return NativeSid.nativeSetSidModel(wanted);}catch(Throwable ignored){return false;}
+        }
+
+        synchronized(lock){
+            boolean wasPlaying=s.playing;
+            s.generation.incrementAndGet();
+            try{
+                if(s.audioTrack!=null){
+                    s.audioTrack.pause();
+                    s.audioTrack.flush();
+                }
+            }catch(Throwable ignored){}
+
+            boolean ok;
+            try{ok=NativeSid.nativeSetSidModel(wanted);}catch(Throwable t){ok=false;}
+
+            if(ok && s.sidLoaded){
+                try{ok=NativeSid.nativeRestart();}catch(Throwable t){ok=false;}
+                s.renderedFrames=0;
+                s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
+            }
+
+            s.playing=wasPlaying && s.sidLoaded && ok;
+            try{
+                if(s.audioTrack!=null && s.playing) s.audioTrack.play();
+            }catch(Throwable ignored){}
+            lock.notifyAll();
+            return ok;
+        }
+    }
+
     public static void setLoop(boolean enabled,long durationMs) {
         PlaybackService s=instance;if(s==null)return;
         s.loopEnabled=enabled;

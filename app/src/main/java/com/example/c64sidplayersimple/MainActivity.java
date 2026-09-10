@@ -28,8 +28,6 @@ public class MainActivity extends Activity {
         web = new WebView(this);
         setContentView(web);
 
-        // SID rendering still runs inside the WebView worker. Keep its renderer
-        // important when the Activity moves to the background.
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             try {
                 web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
@@ -88,13 +86,15 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void nativePlay() { PlaybackService.playNative(); }
         @JavascriptInterface public void nativePause() { PlaybackService.pauseNative(); }
         @JavascriptInterface public void nativeRestart() { PlaybackService.restartNative(); }
+        @JavascriptInterface public boolean nativeSetSidModel(int model) {
+            return PlaybackService.setSidModel(model);
+        }
         @JavascriptInterface public void nativeSetLoop(boolean enabled,long durationMs) {
             PlaybackService.setLoop(enabled,durationMs);
         }
         @JavascriptInterface public int bufferedMs() { return PlaybackService.getBufferedMs(); }
         @JavascriptInterface public long playedMs() { return PlaybackService.getPlayedMs(); }
 
-        // Kept as no-ops so older JS calls cannot break the native engine.
         @JavascriptInterface public void enqueuePcm(String ignored) {}
         @JavascriptInterface public void resetAudioOutput() {}
         @JavascriptInterface public void clearPcm() {}
