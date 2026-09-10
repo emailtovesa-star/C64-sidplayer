@@ -7,8 +7,8 @@ android {
         applicationId = "com.example.c64sidplayersimple"
         minSdk = 23
         targetSdk = 35
-        versionCode = 414
-        versionName = "4.0.14"
+        versionCode = 415
+        versionName = "4.0.15"
     }
     externalNativeBuild {
         cmake {
