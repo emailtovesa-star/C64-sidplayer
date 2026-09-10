@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.11</title>
+<title>C64 SID Player V4.0.17</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -118,6 +118,12 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 .itemBtn.del{color:#ff9a9a}
 .playlistTools{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
 .playlistTools .load,.playlistTools button{margin-top:0}
+.sidModelPanel{margin-top:10px;background:#09082d;border:1px solid #4e49ae;border-radius:9px;padding:9px}
+.sidModelLabel{text-align:center;color:#ffe36c;font:bold 12px monospace;margin-bottom:7px}
+.sidModelButtons{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.sidModelBtn{min-height:40px}
+.sidModelBtn.active{background:#4c469f;border-color:#8aff99;color:#8aff99;box-shadow:0 0 10px #8aff9940 inset}
+.sidModelHint{text-align:center;margin-top:6px;color:#b9b8e8;font-size:10px}
 
 .status{margin-top:10px;background:#09082d;padding:9px;border-radius:8px;font-size:11px;white-space:pre-wrap;word-break:break-word}
 .badge{text-align:center;margin-top:8px;font-size:10px;color:#b7ffbd}
@@ -129,7 +135,7 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 <div class="logoZone" aria-label="C64 SID Player">
   <div id="starField" class="starField" aria-hidden="true"></div>
   <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
-  <div class="sub">V4.0.11</div>
+  <div class="sub">V4.0.17</div>
 </div>
 <div class="panel">
 <div class="screen">
@@ -145,6 +151,14 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 </div>
 <div class="controls" style="grid-template-columns:1fr">
 <button id="loopOne">LOOP 1: OFF</button>
+</div>
+<div class="sidModelPanel">
+  <div class="sidModelLabel">SID MODEL</div>
+  <div class="sidModelButtons">
+    <button id="sid6581" class="sidModelBtn">6581</button>
+    <button id="sid8580" class="sidModelBtn">8580</button>
+  </div>
+  <div class="sidModelHint">reSIDfp chip model + model-specific filter</div>
 </div>
 <div class="playlistTools">
   <label class="load">ADD .SID FILES<input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream"></label>
@@ -171,6 +185,8 @@ let audioClockAvailable=false;
 let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false, playlistRestored=false;
 let showFavoritesOnly=false;
 const FAVORITES_KEY="c64_sid_player_favorites_v1";
+const SID_MODEL_KEY="c64_sid_player_sid_model_v1";
+let sidModel=(localStorage.getItem(SID_MODEL_KEY)==="8580")?8580:6581;
 let favoriteNames=new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY)||"[]"));
 const $=id=>document.getElementById(id), status=s=>$("status").textContent=s;
 const nativeAndroid=!!(window.AndroidPlayer&&typeof window.AndroidPlayer.nativeLoadSid==="function");
@@ -634,6 +650,27 @@ $("newFiles").onchange=async e=>{
 
 $("showFavs").onclick=()=>{showFavoritesOnly=true;renderList();};
 $("showAll").onclick=()=>{showFavoritesOnly=false;renderList();};
+
+function updateSidModelButtons(){
+  $("sid6581").classList.toggle("active",sidModel===6581);
+  $("sid8580").classList.toggle("active",sidModel===8580);
+}
+function selectSidModel(model,announce=true){
+  sidModel=(model===8580)?8580:6581;
+  localStorage.setItem(SID_MODEL_KEY,String(sidModel));
+  updateSidModelButtons();
+  if(nativeAndroid){
+    const ok=android("nativeSetSidModel",sidModel);
+    if(announce) status("SID model "+sidModel+" selected · reSIDfp model-specific filter active.");
+    return ok;
+  }
+  if(announce) status("SID model "+sidModel+" selected.");
+  return true;
+}
+$("sid6581").onclick=()=>selectSidModel(6581,true);
+$("sid8580").onclick=()=>selectSidModel(8580,true);
+updateSidModelButtons();
+selectSidModel(sidModel,false);
 
 $("play").onclick=play;
 $("pause").onclick=pause;
