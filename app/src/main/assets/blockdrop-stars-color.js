@@ -1,167 +1,21 @@
 (() => {
 "use strict";
-
-const VERSION="V4.0.12";
+const VERSION="V4.0.13";
 let canvas=null,ctx=null,stars=[],raf=0,last=0,overlay=null;
-
-const PALETTE=[
-  "#ffffff","#8fe8ff","#72a7ff","#b98cff",
-  "#ff7ad9","#ff8585","#ffd86f","#8dff9e"
-];
-
-function updateVersion(){
-  const t=document.querySelector("title");
-  if(t) t.textContent="C64 SID Player V4.0.12";
-  const sub=document.querySelector(".sub");
-  if(sub) sub.textContent=VERSION;
-}
-
-function addStyles(){
-  if(document.getElementById("bdColorStarStyles")) return;
-  const s=document.createElement("style");
-  s.id="bdColorStarStyles";
-  s.textContent=`
-    #otStarfieldExtra{
-      position:absolute;
-      inset:0;
-      width:100%;
-      height:100%;
-      z-index:0;
-      pointer-events:none;
-      opacity:.95;
-    }
-  `;
-  document.head.appendChild(s);
-}
-
-function biasedX(w){
-  // Extra density on the left side, but still stars across the whole screen.
-  if(Math.random()<0.62){
-    return Math.pow(Math.random(),1.7)*w*0.62;
-  }
-  return Math.random()*w;
-}
-
-function makeStar(w,h,anywhere=true){
-  const z=Math.random();
-  const hot=Math.random();
-  return{
-    x:biasedX(w),
-    y:anywhere?Math.random()*h:-8-Math.random()*50,
-    z,
-    size:.65+z*2.15,
-    speed:24+z*76,
-    drift:(Math.random()-.45)*(7+z*18),
-    twinkle:Math.random()*Math.PI*2,
-    twinkleSpeed:1.2+Math.random()*3.0,
-    color:PALETTE[Math.floor(Math.random()*PALETTE.length)],
-    streak:hot>.72
-  };
-}
-
-function resize(){
-  if(!canvas||!ctx) return;
-  const dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));
-  const w=Math.max(1,window.innerWidth);
-  const h=Math.max(1,window.innerHeight);
-  canvas.width=Math.floor(w*dpr);
-  canvas.height=Math.floor(h*dpr);
-  canvas.style.width=w+"px";
-  canvas.style.height=h+"px";
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-
-  // Denser than V4.0.11, with a minimum large enough for portrait phones.
-  const target=Math.max(140,Math.min(320,Math.floor((w*h)/3300)));
-  while(stars.length<target) stars.push(makeStar(w,h,true));
-  if(stars.length>target) stars.length=target;
-}
-
-function draw(dt){
-  if(!ctx||!canvas) return;
-  const w=parseFloat(canvas.style.width)||window.innerWidth;
-  const h=parseFloat(canvas.style.height)||window.innerHeight;
-  ctx.clearRect(0,0,w,h);
-
-  for(const s of stars){
-    s.y+=s.speed*dt;
-    s.x+=s.drift*dt;
-    s.twinkle+=s.twinkleSpeed*dt;
-
-    if(s.y>h+12||s.x<-18||s.x>w+18){
-      const n=makeStar(w,h,false);
-      Object.assign(s,n);
-    }
-
-    const pulse=.72+Math.sin(s.twinkle)*.28;
-    const alpha=Math.max(.22,Math.min(1,(.42+s.z*.58)*pulse));
-
-    ctx.globalAlpha=alpha;
-    ctx.fillStyle=s.color;
-
-    if(s.streak&&s.z>.58){
-      const len=3+s.z*8;
-      ctx.fillRect(s.x,s.y-len,s.size*.72,len);
-      ctx.globalAlpha=Math.min(1,alpha+.18);
-      ctx.fillRect(s.x,s.y,s.size,s.size);
-    }else{
-      ctx.fillRect(s.x,s.y,s.size,s.size);
-    }
-
-    if(s.z>.72){
-      ctx.globalAlpha=alpha*.30;
-      ctx.fillRect(s.x-s.size*2.2,s.y,s.size*1.8,Math.max(1,s.size*.45));
-    }
-  }
-  ctx.globalAlpha=1;
-}
-
-function visible(){
-  if(!overlay) return false;
-  return overlay.classList.contains("show")&&getComputedStyle(overlay).display!=="none";
-}
-
-function loop(now){
-  const dt=Math.min(.05,Math.max(0,(now-(last||now))/1000));
-  last=now;
-  if(visible()) draw(dt);
-  raf=requestAnimationFrame(loop);
-}
-
-function install(){
-  overlay=document.getElementById("oldTvTetrisOverlay");
-  if(!overlay||document.getElementById("otStarfieldExtra")) return false;
-
-  canvas=document.createElement("canvas");
-  canvas.id="otStarfieldExtra";
-  overlay.insertBefore(canvas,overlay.firstChild);
-  ctx=canvas.getContext("2d");
-
-  resize();
-  window.addEventListener("resize",resize);
-
-  if(!raf){
-    last=performance.now();
-    raf=requestAnimationFrame(loop);
-  }
-  return true;
-}
-
-function init(){
-  updateVersion();
-  addStyles();
-
-  if(install()) return;
-
-  const obs=new MutationObserver(()=>{
-    if(install()) obs.disconnect();
-  });
-  obs.observe(document.documentElement,{childList:true,subtree:true});
-  setTimeout(()=>install(),700);
-}
-
-if(document.readyState==="loading"){
-  document.addEventListener("DOMContentLoaded",init,{once:true});
-}else{
-  init();
-}
+let frozen=false,freezeCanvas=null,freezeCtx=null,toggleBtn=null;
+const PALETTE=["#ffffff","#8fe8ff","#72a7ff","#b98cff","#ff7ad9","#ff8585","#ffd86f","#8dff9e"];
+function updateVersion(){const t=document.querySelector("title");if(t)t.textContent="C64 SID Player V4.0.13";const sub=document.querySelector(".sub");if(sub)sub.textContent=VERSION;}
+function addStyles(){if(document.getElementById("bdColorStarStyles"))return;const s=document.createElement("style");s.id="bdColorStarStyles";s.textContent=`#otStarfieldExtra,#otStarfieldFreeze{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}#otStarfieldExtra{opacity:.95}#otStarfieldFreeze{display:none}#otStarToggle{position:absolute;left:10px;top:10px;width:30px;height:30px;padding:0;border:1px solid rgba(255,255,255,.55);border-radius:50%;background:rgba(0,0,0,.45);color:#ffd86f;font-size:19px;line-height:28px;text-align:center;cursor:pointer;z-index:5;box-shadow:0 0 8px rgba(255,216,111,.35);-webkit-tap-highlight-color:transparent}#otStarToggle.off{color:#8a8a8a;border-color:rgba(255,255,255,.25);box-shadow:none}`;document.head.appendChild(s);}
+function biasedX(w){if(Math.random()<0.62)return Math.pow(Math.random(),1.7)*w*0.62;return Math.random()*w;}
+function makeStar(w,h,anywhere=true){const z=Math.random(),hot=Math.random();return{x:biasedX(w),y:anywhere?Math.random()*h:-8-Math.random()*50,z,size:.65+z*2.15,speed:24+z*76,drift:(Math.random()-.45)*(7+z*18),twinkle:Math.random()*Math.PI*2,twinkleSpeed:1.2+Math.random()*3.0,color:PALETTE[Math.floor(Math.random()*PALETTE.length)],streak:hot>.72};}
+function resize(){if(!canvas||!ctx)return;const dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1)),w=Math.max(1,window.innerWidth),h=Math.max(1,window.innerHeight);for(const c of [canvas,freezeCanvas]){if(!c)continue;c.width=Math.floor(w*dpr);c.height=Math.floor(h*dpr);c.style.width=w+"px";c.style.height=h+"px";}ctx.setTransform(dpr,0,0,dpr,0,0);if(freezeCtx)freezeCtx.setTransform(dpr,0,0,dpr,0,0);const target=Math.max(140,Math.min(320,Math.floor((w*h)/3300)));while(stars.length<target)stars.push(makeStar(w,h,true));if(stars.length>target)stars.length=target;if(frozen)captureFreeze();}
+function draw(dt){if(!ctx||!canvas)return;const w=parseFloat(canvas.style.width)||window.innerWidth,h=parseFloat(canvas.style.height)||window.innerHeight;ctx.clearRect(0,0,w,h);for(const s of stars){s.y+=s.speed*dt;s.x+=s.drift*dt;s.twinkle+=s.twinkleSpeed*dt;if(s.y>h+12||s.x<-18||s.x>w+18)Object.assign(s,makeStar(w,h,false));const pulse=.72+Math.sin(s.twinkle)*.28,alpha=Math.max(.22,Math.min(1,(.42+s.z*.58)*pulse));ctx.globalAlpha=alpha;ctx.fillStyle=s.color;if(s.streak&&s.z>.58){const len=3+s.z*8;ctx.fillRect(s.x,s.y-len,s.size*.72,len);ctx.globalAlpha=Math.min(1,alpha+.18);ctx.fillRect(s.x,s.y,s.size,s.size);}else ctx.fillRect(s.x,s.y,s.size,s.size);if(s.z>.72){ctx.globalAlpha=alpha*.30;ctx.fillRect(s.x-s.size*2.2,s.y,s.size*1.8,Math.max(1,s.size*.45));}}ctx.globalAlpha=1;}
+function visible(){return!!overlay&&overlay.classList.contains("show")&&getComputedStyle(overlay).display!=="none";}
+function loop(now){const dt=Math.min(.05,Math.max(0,(now-(last||now))/1000));last=now;if(visible()&&!frozen)draw(dt);raf=requestAnimationFrame(loop);}
+function captureFreeze(){if(!freezeCanvas||!freezeCtx||!overlay)return;const w=window.innerWidth,h=window.innerHeight;freezeCtx.clearRect(0,0,w,h);const base=document.getElementById("otStarfield");if(base){try{freezeCtx.drawImage(base,0,0,w,h);}catch(e){}}if(canvas){try{freezeCtx.drawImage(canvas,0,0,w,h);}catch(e){}}freezeCanvas.style.display="block";if(base)base.style.visibility="hidden";if(canvas)canvas.style.visibility="hidden";}
+function setFrozen(v){frozen=!!v;const base=document.getElementById("otStarfield");if(frozen){captureFreeze();if(toggleBtn){toggleBtn.classList.add("off");toggleBtn.title="Start starfield scrolling";toggleBtn.setAttribute("aria-label","Start starfield scrolling");}}else{if(freezeCanvas)freezeCanvas.style.display="none";if(base)base.style.visibility="";if(canvas)canvas.style.visibility="";last=performance.now();if(toggleBtn){toggleBtn.classList.remove("off");toggleBtn.title="Stop starfield scrolling";toggleBtn.setAttribute("aria-label","Stop starfield scrolling");}}try{localStorage.setItem("c64_blockdrop_starfield_frozen",frozen?"1":"0");}catch(e){}}
+function makeToggle(){if(!overlay||document.getElementById("otStarToggle"))return;toggleBtn=document.createElement("button");toggleBtn.id="otStarToggle";toggleBtn.type="button";toggleBtn.textContent="★";toggleBtn.title="Stop starfield scrolling";toggleBtn.setAttribute("aria-label","Stop starfield scrolling");toggleBtn.onclick=()=>setFrozen(!frozen);overlay.appendChild(toggleBtn);try{if(localStorage.getItem("c64_blockdrop_starfield_frozen")==="1")setFrozen(true);}catch(e){}}
+function install(){overlay=document.getElementById("oldTvTetrisOverlay");if(!overlay||document.getElementById("otStarfieldExtra"))return false;canvas=document.createElement("canvas");canvas.id="otStarfieldExtra";overlay.insertBefore(canvas,overlay.firstChild);ctx=canvas.getContext("2d");freezeCanvas=document.createElement("canvas");freezeCanvas.id="otStarfieldFreeze";overlay.insertBefore(freezeCanvas,overlay.firstChild);freezeCtx=freezeCanvas.getContext("2d");resize();makeToggle();window.addEventListener("resize",resize);if(!raf){last=performance.now();raf=requestAnimationFrame(loop);}return true;}
+function init(){updateVersion();addStyles();if(install())return;const obs=new MutationObserver(()=>{if(install())obs.disconnect();});obs.observe(document.documentElement,{childList:true,subtree:true});setTimeout(()=>install(),700);}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
 })();
