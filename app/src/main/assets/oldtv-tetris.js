@@ -12,6 +12,11 @@ let messageEl = null;
 let nextCanvas = null;
 let nextCtx = null;
 let pauseBtn = null;
+let starCanvas = null;
+let starCtx = null;
+let stars = [];
+let starRaf = 0;
+let starLast = 0;
 let running = false;
 let paused = false;
 let gameOver = false;
@@ -81,7 +86,20 @@ function addStyles(){
       -webkit-user-select:none;
     }
     .oldTvTetrisOverlay.show{display:flex}
+
+    #otStarfield{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      z-index:0;
+      pointer-events:none;
+      background:radial-gradient(circle at 50% 20%,rgba(27,23,70,.28) 0,rgba(9,7,24,.12) 50%,rgba(2,2,7,.02) 100%);
+    }
+
     .otGameShell{
+      position:relative;
+      z-index:1;
       width:100%;
       height:100%;
       max-width:760px;
@@ -260,6 +278,7 @@ function makeOverlay(){
   overlay.className="oldTvTetrisOverlay";
   overlay.setAttribute("aria-hidden","true");
   overlay.innerHTML=`
+    <canvas id="otStarfield"></canvas>
     <div class="otGameShell">
       <div class="otGameTop">
         <div>
@@ -302,9 +321,13 @@ function makeOverlay(){
   nextCanvas=overlay.querySelector("#otNextCanvas");
   nextCtx=nextCanvas.getContext("2d");
   pauseBtn=overlay.querySelector("#otPause");
+  starCanvas=overlay.querySelector("#otStarfield");
+  starCtx=starCanvas.getContext("2d");
+  resizeStarfield();
 
   overlay.querySelector("#otExit").addEventListener("click",closeGame);
   pauseBtn.addEventListener("click",togglePause);
+  window.addEventListener("resize",resizeStarfield);
   overlay.querySelector("#otStart").addEventListener("click",startGame);
 
   overlay.querySelectorAll("[data-act]").forEach(b=>{
@@ -460,6 +483,92 @@ function cell(x,y,c,alpha=1){
 }
 
 
+
+function makeStar(w,h,randomY=true){
+  const z=Math.random();
+  return {
+    x:Math.random()*w,
+    y:randomY?Math.random()*h:-5-Math.random()*30,
+    z,
+    size:0.7+z*1.8,
+    speed:18+z*52,
+    drift:4+z*12,
+    twinkle:Math.random()*Math.PI*2
+  };
+}
+
+function resizeStarfield(){
+  if(!starCanvas||!starCtx) return;
+  const dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+  const w=Math.max(1,window.innerWidth);
+  const h=Math.max(1,window.innerHeight);
+  starCanvas.width=Math.floor(w*dpr);
+  starCanvas.height=Math.floor(h*dpr);
+  starCanvas.style.width=w+"px";
+  starCanvas.style.height=h+"px";
+  starCtx.setTransform(dpr,0,0,dpr,0,0);
+
+  const target=Math.max(70,Math.min(190,Math.floor((w*h)/6500)));
+  while(stars.length<target) stars.push(makeStar(w,h,true));
+  if(stars.length>target) stars.length=target;
+}
+
+function drawStarfield(dt){
+  if(!starCtx||!starCanvas) return;
+  const w=parseFloat(starCanvas.style.width)||window.innerWidth;
+  const h=parseFloat(starCanvas.style.height)||window.innerHeight;
+
+  starCtx.clearRect(0,0,w,h);
+  for(const s of stars){
+    s.y += s.speed*dt;
+    s.x += s.drift*dt;
+    s.twinkle += dt*(1.2+s.z*2.8);
+
+    if(s.y>h+6 || s.x>w+6){
+      const n=makeStar(w,h,false);
+      Object.assign(s,n);
+      s.x=Math.random()*w*0.95;
+    }
+
+    const alpha=Math.max(.2,Math.min(1,.42+s.z*.46+Math.sin(s.twinkle)*.12));
+    starCtx.globalAlpha=alpha;
+    starCtx.fillStyle="#ffffff";
+    starCtx.fillRect(s.x,s.y,s.size,s.size);
+
+    if(s.z>.72){
+      starCtx.globalAlpha=alpha*.28;
+      starCtx.fillRect(s.x-s.size*2.0,s.y,s.size*1.7,Math.max(1,s.size*.45));
+    }
+  }
+  starCtx.globalAlpha=1;
+}
+
+function starfieldLoop(now){
+  if(!overlay || overlay.style.display==="none"){
+    starRaf=0;
+    return;
+  }
+  const dt=Math.min(.05,Math.max(0,(now-(starLast||now))/1000));
+  starLast=now;
+  drawStarfield(dt);
+  starRaf=requestAnimationFrame(starfieldLoop);
+}
+
+function startStarfield(){
+  if(starRaf) cancelAnimationFrame(starRaf);
+  resizeStarfield();
+  starLast=performance.now();
+  drawStarfield(0);
+  starRaf=requestAnimationFrame(starfieldLoop);
+}
+
+function stopStarfield(){
+  if(starRaf){
+    cancelAnimationFrame(starRaf);
+    starRaf=0;
+  }
+}
+
 function drawNext(){
   if(!nextCtx||!nextCanvas) return;
   nextCtx.clearRect(0,0,nextCanvas.width,nextCanvas.height);
@@ -578,6 +687,7 @@ function openGame(){
   document.body.style.overflow="hidden";
   overlay.classList.add("show");
   overlay.setAttribute("aria-hidden","false");
+  startStarfield();
   draw();
   drawNext();
   try{
@@ -588,6 +698,7 @@ function openGame(){
 }
 
 function closeGame(){
+  stopStarfield();
   if(!overlay) return;
   running=false;
   if(raf){cancelAnimationFrame(raf);raf=0;}
