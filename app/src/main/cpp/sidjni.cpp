@@ -18,6 +18,7 @@ static std::unique_ptr<ReSIDfpBuilder> gBuilder;
 static std::unique_ptr<SidTune> gTune;
 static std::vector<uint8_t> gSidBytes;
 static int gSubsong = 0;
+static int gSidModel = 6581;
 
 static bool rebuildLocked() {
     if (gSidBytes.empty()) return false;
@@ -44,8 +45,8 @@ static bool rebuildLocked() {
         cfg.frequency = 44100;
         cfg.playback = SidConfig::STEREO;
         cfg.sidEmulation = gBuilder.get();
-        cfg.defaultSidModel = SidConfig::MOS6581;
-        cfg.forceSidModel = false;
+        cfg.defaultSidModel = (gSidModel == 8580) ? SidConfig::MOS8580 : SidConfig::MOS6581;
+        cfg.forceSidModel = true;
         cfg.defaultC64Model = SidConfig::PAL;
         cfg.forceC64Model = false;
         cfg.samplingMethod = SidConfig::RESAMPLE_INTERPOLATE;
@@ -79,6 +80,16 @@ JNIEXPORT jboolean JNICALL
 Java_com_example_c64sidplayersimple_NativeSid_nativeRestart(JNIEnv*, jclass) {
     std::lock_guard<std::mutex> lock(gMutex);
     return rebuildLocked() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_example_c64sidplayersimple_NativeSid_nativeSetSidModel(
+        JNIEnv*, jclass, jint model) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    gSidModel = (model == 8580) ? 8580 : 6581;
+    // The playback service performs a clean restart if a tune is already loaded.
+    return JNI_TRUE;
 }
 
 extern "C"
