@@ -3,11 +3,15 @@ package com.example.c64sidplayersimple;
 import android.app.*;
 import android.content.Intent;
 import android.media.*;
+import android.media.session.MediaSession;
+import android.media.session.PlaybackState;
+import android.media.MediaMetadata;
 import android.os.*;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class PlaybackService extends Service {
-    private static final String CHANNEL="sid_playback_v400";
+    private static final String CHANNEL="sid_playback_v419";
     private static final int ID=64, SAMPLE_RATE=44100, CHANNELS=2;
     private static final Object lock=new Object();
 
@@ -17,14 +21,26 @@ public class PlaybackService extends Service {
     private volatile boolean serviceRunning=false;
     private volatile boolean playing=false;
     private volatile boolean sidLoaded=false;
-    private volatile boolean needsRestart=false;
     private volatile boolean loopEnabled=false;
     private volatile long loopLengthMs=0;
     private volatile long renderedFrames=0;
     private volatile long playedBaseFrames=0;
 
+    private volatile String songTitle="C64 SID Player";
+    private volatile String composer="UNKNOWN";
+    private volatile long songDurationMs=0;
+    private volatile int sidModel=6581;
+
     private PowerManager.WakeLock wakeLock;
     private final AtomicLong generation=new AtomicLong(1);
+    private MediaSession mediaSession;
+    private Handler notificationHandler;
+    private final Runnable notificationTicker=new Runnable(){
+        @Override public void run(){
+            try{ updateNotification(); }catch(Throwable ignored){}
+            if(notificationHandler!=null) notificationHandler.postDelayed(this,1000);
+        }
+    };
 
     private static long unsignedHead(AudioTrack t) {
         return ((long)t.getPlaybackHeadPosition()) & 0xffffffffL;
@@ -42,6 +58,7 @@ public class PlaybackService extends Service {
             s.sidLoaded=ok;
             s.renderedFrames=0;
             s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
+            s.updateNotification();
             return ok;
         }
     }
@@ -51,6 +68,7 @@ public class PlaybackService extends Service {
         synchronized(lock){
             try{if(s.audioTrack!=null)s.audioTrack.play();}catch(Throwable ignored){}
             s.playing=true;
+            s.updateNotification();
             lock.notifyAll();
         }
     }
@@ -60,6 +78,7 @@ public class PlaybackService extends Service {
         synchronized(lock){
             s.playing=false;
             try{if(s.audioTrack!=null)s.audioTrack.pause();}catch(Throwable ignored){}
+            s.updateNotification();
         }
     }
 
@@ -74,6 +93,7 @@ public class PlaybackService extends Service {
             s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
             s.playing=true;
             try{if(s.audioTrack!=null)s.audioTrack.play();}catch(Throwable ignored){}
+            s.updateNotification();
             lock.notifyAll();
         }
     }
@@ -81,12 +101,9 @@ public class PlaybackService extends Service {
     public static boolean setSidModel(int model) {
         int wanted=(model==8580)?8580:6581;
         PlaybackService s=instance;
-
-        // Store native preference even before the foreground service exists.
         if(s==null){
             try{return NativeSid.nativeSetSidModel(wanted);}catch(Throwable ignored){return false;}
         }
-
         synchronized(lock){
             boolean wasPlaying=s.playing;
             s.generation.incrementAndGet();
@@ -99,6 +116,7 @@ public class PlaybackService extends Service {
 
             boolean ok;
             try{ok=NativeSid.nativeSetSidModel(wanted);}catch(Throwable t){ok=false;}
+            s.sidModel=wanted;
 
             if(ok && s.sidLoaded){
                 try{ok=NativeSid.nativeRestart();}catch(Throwable t){ok=false;}
@@ -110,8 +128,21 @@ public class PlaybackService extends Service {
             try{
                 if(s.audioTrack!=null && s.playing) s.audioTrack.play();
             }catch(Throwable ignored){}
+            s.updateNotification();
             lock.notifyAll();
             return ok;
+        }
+    }
+
+    public static void setNowPlaying(String title,String author,long durationMs,int model){
+        PlaybackService s=instance;
+        if(s==null)return;
+        synchronized(lock){
+            s.songTitle=(title==null||title.trim().isEmpty())?"C64 SID Player":title.trim();
+            s.composer=(author==null||author.trim().isEmpty())?"UNKNOWN":author.trim();
+            s.songDurationMs=Math.max(0,durationMs);
+            s.sidModel=(model==8580)?8580:6581;
+            s.updateNotification();
         }
     }
 
@@ -119,19 +150,25 @@ public class PlaybackService extends Service {
         PlaybackService s=instance;if(s==null)return;
         s.loopEnabled=enabled;
         s.loopLengthMs=Math.max(0,durationMs);
+        if(durationMs>0) s.songDurationMs=durationMs;
+        s.updateNotification();
     }
 
     public static long getPlayedMs() {
         PlaybackService s=instance;if(s==null||s.audioTrack==null)return 0;
-        synchronized(lock){
-            try{
-                long now=unsignedHead(s.audioTrack);
-                long frames=(now-s.playedBaseFrames)&0xffffffffL;
-                long ms=(frames*1000L)/SAMPLE_RATE;
-                if(s.loopEnabled&&s.loopLengthMs>0) ms%=s.loopLengthMs;
-                return Math.max(0,ms);
-            }catch(Throwable ignored){return 0;}
-        }
+        synchronized(lock){ return s.getPlayedMsLocked(); }
+    }
+
+    private long getPlayedMsLocked(){
+        if(audioTrack==null)return 0;
+        try{
+            long now=unsignedHead(audioTrack);
+            long frames=(now-playedBaseFrames)&0xffffffffL;
+            long ms=(frames*1000L)/SAMPLE_RATE;
+            if(loopEnabled&&loopLengthMs>0) ms%=loopLengthMs;
+            if(!loopEnabled&&songDurationMs>0) ms=Math.min(ms,songDurationMs);
+            return Math.max(0,ms);
+        }catch(Throwable ignored){return 0;}
     }
 
     public static int getBufferedMs(){ return 0; }
@@ -143,24 +180,96 @@ public class PlaybackService extends Service {
             wakeLock=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,getPackageName()+":NativeSID");
             wakeLock.setReferenceCounted(false); wakeLock.acquire();
         }catch(Throwable ignored){}
-        createNotification(); startAudio();
+
+        createMediaSession();
+        createNotificationChannel();
+        startForeground(ID,buildNotification());
+        notificationHandler=new Handler(Looper.getMainLooper());
+        notificationHandler.post(notificationTicker);
+        startAudio();
     }
 
-    private void createNotification(){
+    private void createMediaSession(){
+        try{
+            mediaSession=new MediaSession(this,"C64 SID Player");
+            mediaSession.setActive(true);
+        }catch(Throwable ignored){mediaSession=null;}
+    }
+
+    private void createNotificationChannel(){
         NotificationManager nm=getSystemService(NotificationManager.class);
         if(Build.VERSION.SDK_INT>=26){
             NotificationChannel ch=new NotificationChannel(CHANNEL,"SID playback",NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("Native C64 SID playback"); nm.createNotificationChannel(ch);
+            ch.setDescription("C64 SID playback and lock-screen information");
+            ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            nm.createNotificationChannel(ch);
         }
+    }
+
+    private String fmt(long ms){
+        long total=Math.max(0,ms/1000L);
+        return String.format(Locale.US,"%d:%02d",total/60,total%60);
+    }
+
+    private Notification buildNotification(){
+        long pos;
+        synchronized(lock){ pos=getPlayedMsLocked(); }
+
         Intent launch=getPackageManager().getLaunchIntentForPackage(getPackageName());
         PendingIntent pi=PendingIntent.getActivity(this,0,launch,
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
-        b.setContentTitle("C64 SID Player V4.0")
-         .setContentText("Native reSIDfp playback active")
-         .setSmallIcon(android.R.drawable.ic_media_play)
-         .setContentIntent(pi).setOngoing(true);
-        startForeground(ID,b.build());
+
+        String time=fmt(pos)+" / "+(songDurationMs>0?fmt(songDurationMs):"--:--");
+        String text=composer+"  •  "+time+"  •  SID "+sidModel;
+
+        Notification.Builder b=Build.VERSION.SDK_INT>=26
+            ?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
+
+        b.setContentTitle(songTitle)
+         .setContentText(text)
+         .setSubText("C64 SID Player")
+         .setSmallIcon(playing?android.R.drawable.ic_media_play:android.R.drawable.ic_media_pause)
+         .setContentIntent(pi)
+         .setOngoing(playing)
+         .setOnlyAlertOnce(true)
+         .setVisibility(Notification.VISIBILITY_PUBLIC)
+         .setCategory(Notification.CATEGORY_TRANSPORT)
+         .setShowWhen(false);
+
+        if(Build.VERSION.SDK_INT>=21 && mediaSession!=null){
+            b.setStyle(new Notification.MediaStyle()
+                .setMediaSession(mediaSession.getSessionToken()));
+        }
+        return b.build();
+    }
+
+    private void updateMediaSession(long pos){
+        if(mediaSession==null)return;
+        try{
+            MediaMetadata.Builder mb=new MediaMetadata.Builder()
+                .putString(MediaMetadata.METADATA_KEY_TITLE,songTitle)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST,composer)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM,"C64 SID Player · SID "+sidModel);
+            if(songDurationMs>0)mb.putLong(MediaMetadata.METADATA_KEY_DURATION,songDurationMs);
+            mediaSession.setMetadata(mb.build());
+
+            int state=playing?PlaybackState.STATE_PLAYING:PlaybackState.STATE_PAUSED;
+            mediaSession.setPlaybackState(new PlaybackState.Builder()
+                .setState(state,pos,playing?1.0f:0.0f,SystemClock.elapsedRealtime())
+                .setActions(PlaybackState.ACTION_PLAY|PlaybackState.ACTION_PAUSE|PlaybackState.ACTION_PLAY_PAUSE)
+                .build());
+        }catch(Throwable ignored){}
+    }
+
+    private void updateNotification(){
+        if(instance!=this)return;
+        long pos;
+        synchronized(lock){pos=getPlayedMsLocked();}
+        updateMediaSession(pos);
+        try{
+            NotificationManager nm=getSystemService(NotificationManager.class);
+            nm.notify(ID,buildNotification());
+        }catch(Throwable ignored){}
     }
 
     private AudioTrack makeTrack(){
@@ -218,6 +327,10 @@ public class PlaybackService extends Service {
         synchronized(lock){lock.notifyAll();}
         if(renderThread!=null)renderThread.interrupt();
         renderThread=null;
+        if(notificationHandler!=null){
+            notificationHandler.removeCallbacks(notificationTicker);
+            notificationHandler=null;
+        }
         synchronized(lock){
             if(audioTrack!=null){
                 try{audioTrack.pause();}catch(Throwable ignored){}
@@ -227,6 +340,10 @@ public class PlaybackService extends Service {
                 audioTrack=null;
             }
             try{NativeSid.nativeUnload();}catch(Throwable ignored){}
+        }
+        if(mediaSession!=null){
+            try{mediaSession.setActive(false);mediaSession.release();}catch(Throwable ignored){}
+            mediaSession=null;
         }
     }
 

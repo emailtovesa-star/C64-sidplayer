@@ -89,6 +89,9 @@ public class MainActivity extends Activity {
         @JavascriptInterface public boolean nativeSetSidModel(int model) {
             return PlaybackService.setSidModel(model);
         }
+        @JavascriptInterface public void nativeSetNowPlaying(String title,String composer,long durationMs,int sidModel) {
+            PlaybackService.setNowPlaying(title,composer,durationMs,sidModel);
+        }
         @JavascriptInterface public void nativeSetLoop(boolean enabled,long durationMs) {
             PlaybackService.setLoop(enabled,durationMs);
         }
