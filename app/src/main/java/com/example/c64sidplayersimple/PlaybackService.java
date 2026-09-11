@@ -10,9 +10,14 @@ import android.os.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class PlaybackService extends Service {
-    private static final String CHANNEL="sid_playback_v421";
+    private static final String CHANNEL="sid_playback_v422";
     private static final int ID=64, SAMPLE_RATE=44100, CHANNELS=2;
     private static final Object lock=new Object();
+
+    private static final String ACTION_PREV="com.example.c64sidplayersimple.MEDIA_PREV";
+    private static final String ACTION_TOGGLE="com.example.c64sidplayersimple.MEDIA_TOGGLE";
+    private static final String ACTION_NEXT="com.example.c64sidplayersimple.MEDIA_NEXT";
+    private static final String ACTION_STOP="com.example.c64sidplayersimple.MEDIA_STOP";
 
     private static PlaybackService instance;
     private AudioTrack audioTrack;
@@ -36,6 +41,10 @@ public class PlaybackService extends Service {
 
     private static long unsignedHead(AudioTrack t) {
         return ((long)t.getPlaybackHeadPosition()) & 0xffffffffL;
+    }
+
+    private void sendUiCommand(String cmd){
+        try{ MainActivity.dispatchMediaCommand(cmd); }catch(Throwable ignored){}
     }
 
     public static boolean loadSid(byte[] data,int subsong) {
@@ -171,9 +180,22 @@ public class PlaybackService extends Service {
         startAudio();
     }
 
+    private PendingIntent commandIntent(String action,int requestCode){
+        Intent i=new Intent(this,PlaybackService.class).setAction(action);
+        return PendingIntent.getService(this,requestCode,i,
+            PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+    }
+
     private void createMediaSession(){
         try{
             mediaSession=new MediaSession(this,"C64 SID Player");
+            mediaSession.setCallback(new MediaSession.Callback(){
+                @Override public void onSkipToPrevious(){ sendUiCommand("prev"); }
+                @Override public void onSkipToNext(){ sendUiCommand("next"); }
+                @Override public void onPlay(){ sendUiCommand("toggle"); }
+                @Override public void onPause(){ sendUiCommand("toggle"); }
+                @Override public void onStop(){ sendUiCommand("stop"); }
+            });
             mediaSession.setActive(true);
         }catch(Throwable ignored){mediaSession=null;}
     }
@@ -182,7 +204,7 @@ public class PlaybackService extends Service {
         NotificationManager nm=getSystemService(NotificationManager.class);
         if(Build.VERSION.SDK_INT>=26){
             NotificationChannel ch=new NotificationChannel(CHANNEL,"SID playback",NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("C64 SID playback and lock-screen information");
+            ch.setDescription("C64 SID playback and lock-screen controls");
             ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             nm.createNotificationChannel(ch);
         }
@@ -190,8 +212,18 @@ public class PlaybackService extends Service {
 
     private Notification buildNotification(){
         Intent launch=getPackageManager().getLaunchIntentForPackage(getPackageName());
-        PendingIntent pi=PendingIntent.getActivity(this,0,launch,
+        PendingIntent open=PendingIntent.getActivity(this,0,launch,
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+
+        Notification.Action prev=new Notification.Action.Builder(
+            android.R.drawable.ic_media_previous,"Previous",commandIntent(ACTION_PREV,1)).build();
+        Notification.Action toggle=new Notification.Action.Builder(
+            playing?android.R.drawable.ic_media_pause:android.R.drawable.ic_media_play,
+            playing?"Pause":"Play",commandIntent(ACTION_TOGGLE,2)).build();
+        Notification.Action next=new Notification.Action.Builder(
+            android.R.drawable.ic_media_next,"Next",commandIntent(ACTION_NEXT,3)).build();
+        Notification.Action stop=new Notification.Action.Builder(
+            android.R.drawable.ic_menu_close_clear_cancel,"Stop",commandIntent(ACTION_STOP,4)).build();
 
         Notification.Builder b=Build.VERSION.SDK_INT>=26
             ?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
@@ -200,15 +232,21 @@ public class PlaybackService extends Service {
          .setContentText(composer)
          .setSubText("C64 SID Player")
          .setSmallIcon(playing?android.R.drawable.ic_media_play:android.R.drawable.ic_media_pause)
-         .setContentIntent(pi)
+         .setContentIntent(open)
          .setOngoing(playing)
          .setOnlyAlertOnce(true)
          .setVisibility(Notification.VISIBILITY_PUBLIC)
          .setCategory(Notification.CATEGORY_TRANSPORT)
-         .setShowWhen(false);
+         .setShowWhen(false)
+         .addAction(prev)
+         .addAction(toggle)
+         .addAction(next)
+         .addAction(stop);
 
         if(Build.VERSION.SDK_INT>=21 && mediaSession!=null){
-            b.setStyle(new Notification.MediaStyle().setMediaSession(mediaSession.getSessionToken()));
+            b.setStyle(new Notification.MediaStyle()
+                .setMediaSession(mediaSession.getSessionToken())
+                .setShowActionsInCompactView(0,1,2));
         }
         return b.build();
     }
@@ -226,10 +264,12 @@ public class PlaybackService extends Service {
             mediaSession.setMetadata(mb.build());
 
             int state=playing?PlaybackState.STATE_PLAYING:PlaybackState.STATE_PAUSED;
-            long pos=getPlayedMsLocked();
+            long actions=PlaybackState.ACTION_PLAY|PlaybackState.ACTION_PAUSE|
+                PlaybackState.ACTION_PLAY_PAUSE|PlaybackState.ACTION_SKIP_TO_PREVIOUS|
+                PlaybackState.ACTION_SKIP_TO_NEXT|PlaybackState.ACTION_STOP;
             mediaSession.setPlaybackState(new PlaybackState.Builder()
-                .setState(state,pos,playing?1.0f:0.0f,SystemClock.elapsedRealtime())
-                .setActions(PlaybackState.ACTION_PLAY|PlaybackState.ACTION_PAUSE|PlaybackState.ACTION_PLAY_PAUSE)
+                .setState(state,getPlayedMsLocked(),playing?1.0f:0.0f,SystemClock.elapsedRealtime())
+                .setActions(actions)
                 .build());
         }catch(Throwable ignored){}
     }
@@ -241,6 +281,13 @@ public class PlaybackService extends Service {
             NotificationManager nm=getSystemService(NotificationManager.class);
             nm.notify(ID,buildNotification());
         }catch(Throwable ignored){}
+    }
+
+    private void handleCommand(String action){
+        if(ACTION_PREV.equals(action)){sendUiCommand("prev");return;}
+        if(ACTION_NEXT.equals(action)){sendUiCommand("next");return;}
+        if(ACTION_TOGGLE.equals(action)){sendUiCommand("toggle");return;}
+        if(ACTION_STOP.equals(action)){sendUiCommand("stop");return;}
     }
 
     private AudioTrack makeTrack(){
@@ -314,7 +361,11 @@ public class PlaybackService extends Service {
         }
     }
 
-    @Override public int onStartCommand(Intent intent,int flags,int startId){return START_STICKY;}
+    @Override public int onStartCommand(Intent intent,int flags,int startId){
+        if(intent!=null&&intent.getAction()!=null)handleCommand(intent.getAction());
+        return START_STICKY;
+    }
+
     @Override public void onDestroy(){
         stopAudio();instance=null;
         try{if(wakeLock!=null&&wakeLock.isHeld())wakeLock.release();}catch(Throwable ignored){}

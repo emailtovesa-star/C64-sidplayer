@@ -19,12 +19,26 @@ import androidx.webkit.WebViewClientCompat;
 
 public class MainActivity extends Activity {
     private static final int PICK = 1001;
+    private static volatile MainActivity instance;
     private WebView web;
     private ValueCallback<Uri[]> callback;
+
+    public static void dispatchMediaCommand(String command) {
+        MainActivity a=instance;
+        if(a==null||a.web==null||command==null)return;
+        final String safe=command.replace("\\","").replace("\"","");
+        a.runOnUiThread(() -> {
+            try{
+                a.web.evaluateJavascript(
+                    "window.onNativeMediaCommand&&window.onNativeMediaCommand(\""+safe+"\")", null);
+            }catch(Throwable ignored){}
+        });
+    }
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        instance=this;
         web = new WebView(this);
         setContentView(web);
 
@@ -130,6 +144,7 @@ public class MainActivity extends Activity {
             "window.onNativeFilePickerClosed&&window.onNativeFilePickerClosed()", null),150);
     }
     @Override protected void onDestroy() {
+        if(instance==this)instance=null;
         if(web!=null){web.loadUrl("about:blank");web.destroy();}
         super.onDestroy();
     }
