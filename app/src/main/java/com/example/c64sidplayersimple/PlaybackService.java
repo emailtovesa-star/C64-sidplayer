@@ -11,7 +11,7 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class PlaybackService extends Service {
-    private static final String CHANNEL="sid_playback_v419";
+    private static final String CHANNEL="sid_playback_v420";
     private static final int ID=64, SAMPLE_RATE=44100, CHANNELS=2;
     private static final Object lock=new Object();
 
@@ -108,10 +108,7 @@ public class PlaybackService extends Service {
             boolean wasPlaying=s.playing;
             s.generation.incrementAndGet();
             try{
-                if(s.audioTrack!=null){
-                    s.audioTrack.pause();
-                    s.audioTrack.flush();
-                }
+                if(s.audioTrack!=null){s.audioTrack.pause();s.audioTrack.flush();}
             }catch(Throwable ignored){}
 
             boolean ok;
@@ -125,9 +122,7 @@ public class PlaybackService extends Service {
             }
 
             s.playing=wasPlaying && s.sidLoaded && ok;
-            try{
-                if(s.audioTrack!=null && s.playing) s.audioTrack.play();
-            }catch(Throwable ignored){}
+            try{if(s.audioTrack!=null && s.playing)s.audioTrack.play();}catch(Throwable ignored){}
             s.updateNotification();
             lock.notifyAll();
             return ok;
@@ -135,8 +130,7 @@ public class PlaybackService extends Service {
     }
 
     public static void setNowPlaying(String title,String author,long durationMs,int model){
-        PlaybackService s=instance;
-        if(s==null)return;
+        PlaybackService s=instance;if(s==null)return;
         synchronized(lock){
             s.songTitle=(title==null||title.trim().isEmpty())?"C64 SID Player":title.trim();
             s.composer=(author==null||author.trim().isEmpty())?"UNKNOWN":author.trim();
@@ -150,13 +144,13 @@ public class PlaybackService extends Service {
         PlaybackService s=instance;if(s==null)return;
         s.loopEnabled=enabled;
         s.loopLengthMs=Math.max(0,durationMs);
-        if(durationMs>0) s.songDurationMs=durationMs;
+        if(durationMs>0)s.songDurationMs=durationMs;
         s.updateNotification();
     }
 
     public static long getPlayedMs() {
         PlaybackService s=instance;if(s==null||s.audioTrack==null)return 0;
-        synchronized(lock){ return s.getPlayedMsLocked(); }
+        synchronized(lock){return s.getPlayedMsLocked();}
     }
 
     private long getPlayedMsLocked(){
@@ -165,22 +159,21 @@ public class PlaybackService extends Service {
             long now=unsignedHead(audioTrack);
             long frames=(now-playedBaseFrames)&0xffffffffL;
             long ms=(frames*1000L)/SAMPLE_RATE;
-            if(loopEnabled&&loopLengthMs>0) ms%=loopLengthMs;
-            if(!loopEnabled&&songDurationMs>0) ms=Math.min(ms,songDurationMs);
+            if(loopEnabled&&loopLengthMs>0)ms%=loopLengthMs;
+            if(!loopEnabled&&songDurationMs>0)ms=Math.min(ms,songDurationMs);
             return Math.max(0,ms);
         }catch(Throwable ignored){return 0;}
     }
 
-    public static int getBufferedMs(){ return 0; }
+    public static int getBufferedMs(){return 0;}
 
     @Override public void onCreate(){
-        super.onCreate(); instance=this;
+        super.onCreate();instance=this;
         try{
             PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
             wakeLock=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,getPackageName()+":NativeSID");
-            wakeLock.setReferenceCounted(false); wakeLock.acquire();
+            wakeLock.setReferenceCounted(false);wakeLock.acquire();
         }catch(Throwable ignored){}
-
         createMediaSession();
         createNotificationChannel();
         startForeground(ID,buildNotification());
@@ -211,22 +204,23 @@ public class PlaybackService extends Service {
         return String.format(Locale.US,"%d:%02d",total/60,total%60);
     }
 
+    private String compactInfo(long pos){
+        String time=fmt(pos)+" / "+(songDurationMs>0?fmt(songDurationMs):"--:--");
+        return composer+" • SID "+sidModel+" • "+time;
+    }
+
     private Notification buildNotification(){
         long pos;
-        synchronized(lock){ pos=getPlayedMsLocked(); }
-
+        synchronized(lock){pos=getPlayedMsLocked();}
         Intent launch=getPackageManager().getLaunchIntentForPackage(getPackageName());
         PendingIntent pi=PendingIntent.getActivity(this,0,launch,
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-
-        String time=fmt(pos)+" / "+(songDurationMs>0?fmt(songDurationMs):"--:--");
-        String text=composer+"  •  "+time+"  •  SID "+sidModel;
 
         Notification.Builder b=Build.VERSION.SDK_INT>=26
             ?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
 
         b.setContentTitle(songTitle)
-         .setContentText(text)
+         .setContentText(compactInfo(pos))
          .setSubText("C64 SID Player")
          .setSmallIcon(playing?android.R.drawable.ic_media_play:android.R.drawable.ic_media_pause)
          .setContentIntent(pi)
@@ -237,8 +231,7 @@ public class PlaybackService extends Service {
          .setShowWhen(false);
 
         if(Build.VERSION.SDK_INT>=21 && mediaSession!=null){
-            b.setStyle(new Notification.MediaStyle()
-                .setMediaSession(mediaSession.getSessionToken()));
+            b.setStyle(new Notification.MediaStyle().setMediaSession(mediaSession.getSessionToken()));
         }
         return b.build();
     }
@@ -246,10 +239,17 @@ public class PlaybackService extends Service {
     private void updateMediaSession(long pos){
         if(mediaSession==null)return;
         try{
+            String line=compactInfo(pos);
+
             MediaMetadata.Builder mb=new MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE,songTitle)
-                .putString(MediaMetadata.METADATA_KEY_ARTIST,composer)
-                .putString(MediaMetadata.METADATA_KEY_ALBUM,"C64 SID Player · SID "+sidModel);
+                // Many Android lock screens show ARTIST as the one compact subtitle line.
+                .putString(MediaMetadata.METADATA_KEY_ARTIST,line)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM,"C64 SID Player")
+                // OEM lock screens may prefer DISPLAY_* keys over TITLE/ARTIST.
+                .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE,songTitle)
+                .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE,line)
+                .putString(MediaMetadata.METADATA_KEY_DISPLAY_DESCRIPTION,"C64 SID Player");
             if(songDurationMs>0)mb.putLong(MediaMetadata.METADATA_KEY_DURATION,songDurationMs);
             mediaSession.setMetadata(mb.build());
 
@@ -290,7 +290,7 @@ public class PlaybackService extends Service {
             while(serviceRunning){
                 try{
                     synchronized(lock){
-                        while(serviceRunning&&(!playing||!sidLoaded)) lock.wait(250);
+                        while(serviceRunning&&(!playing||!sidLoaded))lock.wait(250);
                     }
                     if(!serviceRunning)break;
                     if(!playing||!sidLoaded)continue;
@@ -313,9 +313,9 @@ public class PlaybackService extends Service {
                     int off=0;
                     while(serviceRunning&&playing&&off<pcm.length){
                         int n=t.write(pcm,off,pcm.length-off,AudioTrack.WRITE_BLOCKING);
-                        if(n>0)off+=n; else if(n<0)break;
+                        if(n>0)off+=n;else if(n<0)break;
                     }
-                    renderedFrames += pcm.length/2;
+                    renderedFrames+=pcm.length/2;
                 }catch(InterruptedException e){break;}catch(Throwable ignored){}
             }
         },"Native-SID-reSIDfp");
@@ -349,7 +349,7 @@ public class PlaybackService extends Service {
 
     @Override public int onStartCommand(Intent intent,int flags,int startId){return START_STICKY;}
     @Override public void onDestroy(){
-        stopAudio(); instance=null;
+        stopAudio();instance=null;
         try{if(wakeLock!=null&&wakeLock.isHeld())wakeLock.release();}catch(Throwable ignored){}
         super.onDestroy();
     }
