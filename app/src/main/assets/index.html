@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.17</title>
+<title>C64 SID Player V4.0.18</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -127,15 +127,19 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 
 .status{margin-top:10px;background:#09082d;padding:9px;border-radius:8px;font-size:11px;white-space:pre-wrap;word-break:break-word}
 .badge{text-align:center;margin-top:8px;font-size:10px;color:#b7ffbd}
+.bwToggle{position:absolute;right:-7px;top:-7px;width:38px;height:22px;min-height:22px;padding:0 4px;border:1px solid #d7d7d7;border-radius:11px;background:#111;color:#fff;font:bold 10px monospace;line-height:20px;box-shadow:0 2px 6px #0008;z-index:6}
+.bwToggle.active{background:#fff;color:#000;border-color:#000}
+html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 @media(max-width:520px){.controls{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
 <div class="wrap"><button id="infoBtn" class="infoBtn" aria-label="Information">i</button>
+<button id="bwToggle" class="bwToggle" aria-label="Toggle black and white mode" title="Black / white mode">B/W</button>
 <div class="logoZone" aria-label="C64 SID Player">
   <div id="starField" class="starField" aria-hidden="true"></div>
   <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
-  <div class="sub">V4.0.17</div>
+  <div class="sub">V4.0.18</div>
 </div>
 <div class="panel">
 <div class="screen">
@@ -185,6 +189,7 @@ let audioClockAvailable=false;
 let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false, playlistRestored=false;
 let showFavoritesOnly=false;
 const FAVORITES_KEY="c64_sid_player_favorites_v1";
+const BW_MODE_KEY="c64_sid_player_bw_mode_v1";
 const SID_MODEL_KEY="c64_sid_player_sid_model_v1";
 let sidModel=(localStorage.getItem(SID_MODEL_KEY)==="8580")?8580:6581;
 let favoriteNames=new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY)||"[]"));
@@ -611,6 +616,18 @@ seedInfoNotes();
 $("infoBtn").onclick=()=>$("infoModal").classList.add("show");
 $("infoClose").onclick=()=>$("infoModal").classList.remove("show");
 $("infoModal").onclick=e=>{if(e.target===$("infoModal"))$("infoModal").classList.remove("show");};
+function applyBwMode(enabled){
+  document.documentElement.classList.toggle("bwMode",!!enabled);
+  $("bwToggle").classList.toggle("active",!!enabled);
+  $("bwToggle").textContent=enabled?"COLOR":"B/W";
+  $("bwToggle").title=enabled?"Return to color":"Black / white mode";
+  try{localStorage.setItem(BW_MODE_KEY,enabled?"1":"0");}catch(e){}
+}
+let bwMode=false;
+try{bwMode=localStorage.getItem(BW_MODE_KEY)==="1";}catch(e){}
+applyBwMode(bwMode);
+$("bwToggle").onclick=()=>{bwMode=!bwMode;applyBwMode(bwMode);};
+
 
 $("files").onchange=async e=>{
   for(const f of [...e.target.files]){
