@@ -7,11 +7,10 @@ import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.media.MediaMetadata;
 import android.os.*;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class PlaybackService extends Service {
-    private static final String CHANNEL="sid_playback_v420";
+    private static final String CHANNEL="sid_playback_v421";
     private static final int ID=64, SAMPLE_RATE=44100, CHANNELS=2;
     private static final Object lock=new Object();
 
@@ -34,13 +33,6 @@ public class PlaybackService extends Service {
     private PowerManager.WakeLock wakeLock;
     private final AtomicLong generation=new AtomicLong(1);
     private MediaSession mediaSession;
-    private Handler notificationHandler;
-    private final Runnable notificationTicker=new Runnable(){
-        @Override public void run(){
-            try{ updateNotification(); }catch(Throwable ignored){}
-            if(notificationHandler!=null) notificationHandler.postDelayed(this,1000);
-        }
-    };
 
     private static long unsignedHead(AudioTrack t) {
         return ((long)t.getPlaybackHeadPosition()) & 0xffffffffL;
@@ -145,7 +137,6 @@ public class PlaybackService extends Service {
         s.loopEnabled=enabled;
         s.loopLengthMs=Math.max(0,durationMs);
         if(durationMs>0)s.songDurationMs=durationMs;
-        s.updateNotification();
     }
 
     public static long getPlayedMs() {
@@ -177,8 +168,6 @@ public class PlaybackService extends Service {
         createMediaSession();
         createNotificationChannel();
         startForeground(ID,buildNotification());
-        notificationHandler=new Handler(Looper.getMainLooper());
-        notificationHandler.post(notificationTicker);
         startAudio();
     }
 
@@ -199,19 +188,7 @@ public class PlaybackService extends Service {
         }
     }
 
-    private String fmt(long ms){
-        long total=Math.max(0,ms/1000L);
-        return String.format(Locale.US,"%d:%02d",total/60,total%60);
-    }
-
-    private String compactInfo(long pos){
-        String time=fmt(pos)+" / "+(songDurationMs>0?fmt(songDurationMs):"--:--");
-        return composer+" • SID "+sidModel+" • "+time;
-    }
-
     private Notification buildNotification(){
-        long pos;
-        synchronized(lock){pos=getPlayedMsLocked();}
         Intent launch=getPackageManager().getLaunchIntentForPackage(getPackageName());
         PendingIntent pi=PendingIntent.getActivity(this,0,launch,
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
@@ -220,7 +197,7 @@ public class PlaybackService extends Service {
             ?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
 
         b.setContentTitle(songTitle)
-         .setContentText(compactInfo(pos))
+         .setContentText(composer)
          .setSubText("C64 SID Player")
          .setSmallIcon(playing?android.R.drawable.ic_media_play:android.R.drawable.ic_media_pause)
          .setContentIntent(pi)
@@ -236,24 +213,20 @@ public class PlaybackService extends Service {
         return b.build();
     }
 
-    private void updateMediaSession(long pos){
+    private void updateMediaSession(){
         if(mediaSession==null)return;
         try{
-            String line=compactInfo(pos);
-
             MediaMetadata.Builder mb=new MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE,songTitle)
-                // Many Android lock screens show ARTIST as the one compact subtitle line.
-                .putString(MediaMetadata.METADATA_KEY_ARTIST,line)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST,composer)
                 .putString(MediaMetadata.METADATA_KEY_ALBUM,"C64 SID Player")
-                // OEM lock screens may prefer DISPLAY_* keys over TITLE/ARTIST.
                 .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE,songTitle)
-                .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE,line)
+                .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE,composer)
                 .putString(MediaMetadata.METADATA_KEY_DISPLAY_DESCRIPTION,"C64 SID Player");
-            if(songDurationMs>0)mb.putLong(MediaMetadata.METADATA_KEY_DURATION,songDurationMs);
             mediaSession.setMetadata(mb.build());
 
             int state=playing?PlaybackState.STATE_PLAYING:PlaybackState.STATE_PAUSED;
+            long pos=getPlayedMsLocked();
             mediaSession.setPlaybackState(new PlaybackState.Builder()
                 .setState(state,pos,playing?1.0f:0.0f,SystemClock.elapsedRealtime())
                 .setActions(PlaybackState.ACTION_PLAY|PlaybackState.ACTION_PAUSE|PlaybackState.ACTION_PLAY_PAUSE)
@@ -263,9 +236,7 @@ public class PlaybackService extends Service {
 
     private void updateNotification(){
         if(instance!=this)return;
-        long pos;
-        synchronized(lock){pos=getPlayedMsLocked();}
-        updateMediaSession(pos);
+        updateMediaSession();
         try{
             NotificationManager nm=getSystemService(NotificationManager.class);
             nm.notify(ID,buildNotification());
@@ -327,10 +298,6 @@ public class PlaybackService extends Service {
         synchronized(lock){lock.notifyAll();}
         if(renderThread!=null)renderThread.interrupt();
         renderThread=null;
-        if(notificationHandler!=null){
-            notificationHandler.removeCallbacks(notificationTicker);
-            notificationHandler=null;
-        }
         synchronized(lock){
             if(audioTrack!=null){
                 try{audioTrack.pause();}catch(Throwable ignored){}
