@@ -1,6 +1,6 @@
 (() => {
 "use strict";
-const VERSION="V4.0.22";
+const VERSION="V4.0.23";
 let canvas=null,ctx=null,stars=[],raf=0,last=0,overlay=null;
 let frozen=false,freezeCanvas=null,freezeCtx=null,toggleBtn=null;
 const PALETTE=["#ffffff","#8fe8ff","#72a7ff","#b98cff","#ff7ad9","#ff8585","#ffd86f","#8dff9e"];
