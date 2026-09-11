@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.18</title>
+<title>C64 SID Player V4.0.19</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -139,7 +139,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 <div class="logoZone" aria-label="C64 SID Player">
   <div id="starField" class="starField" aria-hidden="true"></div>
   <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
-  <div class="sub">V4.0.18</div>
+  <div class="sub">V4.0.19</div>
 </div>
 <div class="panel">
 <div class="screen">
@@ -200,6 +200,16 @@ const toBase64=(buf)=>{
   for(let i=0;i<bytes.length;i+=CHUNK) out+=String.fromCharCode(...bytes.subarray(i,i+CHUNK));
   return btoa(out);
 };
+
+
+function updateAndroidNowPlaying(){
+  if(!nativeAndroid)return;
+  const q=(current>=0&&current<queue.length)?queue[current]:null;
+  const h=q&&q.header?q.header:null;
+  const title=(h&&h.name)?h.name:(q&&q.file?q.file.name:"C64 SID Player");
+  const composer=(h&&h.author)?h.author:"UNKNOWN";
+  android("nativeSetNowPlaying",title,composer,Math.round((durationSec||0)*1000),sidModel);
+}
 
 function android(fn,...args){
   try{
@@ -477,6 +487,7 @@ function startWorker(){
       $("author").textContent="BY "+(m.header.author||"UNKNOWN");
       $("release").textContent=m.header.release||"RELEASE INFO UNKNOWN";
       updateTrack(); renderList();
+      updateAndroidNowPlaying();
       status("");
     }else if(m.type==="duration"){
       const sec=Number(m.seconds);
@@ -489,6 +500,7 @@ function startWorker(){
       }
       if(nativeAndroid) android("nativeSetLoop",loopOne,Math.round((durationSec||0)*1000));
       accumulatedPlaySec=0; playStartedAt=playing?performance.now():0;
+      updateAndroidNowPlaying();
       updatePlaytime();
     }else if(m.type==="looped"){
       // The worker renders ahead of AudioTrack. Do NOT reset the visible
@@ -676,6 +688,7 @@ function selectSidModel(model,announce=true){
   sidModel=(model===8580)?8580:6581;
   localStorage.setItem(SID_MODEL_KEY,String(sidModel));
   updateSidModelButtons();
+  updateAndroidNowPlaying();
   if(nativeAndroid){
     const ok=android("nativeSetSidModel",sidModel);
     if(announce) status("SID model "+sidModel+" selected · reSIDfp model-specific filter active.");
