@@ -183,6 +183,23 @@
           inset 0 0 22px #000,
           inset 0 0 5px #a0b1ab88;
       }
+      .tvGifAnimation{
+        position:absolute;
+        inset:0;
+        width:100%;
+        height:100%;
+        object-fit:cover;
+        display:none;
+        z-index:2;
+        border-radius:inherit;
+        pointer-events:none;
+      }
+      .tvGlass.gifPlaying .tvGifAnimation{display:block}
+      .tvGlass.gifPlaying .tvOffDot{display:none}
+      .tvGlass.gifPlaying::before{z-index:3;opacity:.10}
+      .tvGlass.gifPlaying::after{z-index:4}
+      .tvGlass{cursor:pointer;-webkit-tap-highlight-color:transparent}
+
       .tvGlass::before{
         content:"";
         position:absolute;
@@ -324,7 +341,7 @@
       <div class="vintageTv">
         <div class="tvAntenna"></div>
         <div class="tvCabinet">
-          <div class="tvGlass"><div class="tvOffDot"></div></div>
+          <div class="tvGlass" id="retroTvTouchScreen"><div class="tvOffDot"></div><img class="tvGifAnimation" id="retroTvGif" alt="" draggable="false"></div>
           <div class="tvControlsOld">
             <div class="tvKnob one"></div>
             <div class="tvKnob two"></div>
@@ -337,6 +354,23 @@
 
     screen.appendChild(stage);
     screen.appendChild(button);
+
+    // Touch the actual retro TV glass to start the embedded GIF.
+    // The src is assigned only on first touch, avoiding GIF decode work at app startup.
+    const retroTvTouchScreen = stage.querySelector("#retroTvTouchScreen");
+    const retroTvGif = stage.querySelector("#retroTvGif");
+    let retroTvGifStarted = false;
+    if (retroTvTouchScreen && retroTvGif) {
+      retroTvTouchScreen.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!retroTvGifStarted) {
+          retroTvGif.src = "retro-tv-animation.gif";
+          retroTvGifStarted = true;
+        }
+        retroTvTouchScreen.classList.add("gifPlaying");
+      });
+    }
 
     const infoElements = [...screen.children].filter(el =>
       el !== stage &&
