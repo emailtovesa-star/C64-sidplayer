@@ -162,7 +162,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
     <button id="sid6581" class="sidModelBtn">6581</button>
     <button id="sid8580" class="sidModelBtn">8580</button>
   </div>
-  <div class="sidModelHint">reSIDfp chip model + model-specific filter</div>
+  <div class="sidModelHint">reSIDfp chip model + model-specific filter</div><div id="digiBoostRow" style="display:none;margin-top:8px"><button id="digiBoost" class="sidModelBtn" style="width:100%">DIGIBOOST: OFF</button><div class="sidModelHint">8580 only · louder digi/sample playback</div></div>
 </div>
 <div class="playlistTools">
   <label class="load">ADD .SID FILES<input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream"></label>
@@ -698,12 +698,18 @@ $("newFiles").onchange=async e=>{
 $("showFavs").onclick=()=>{showFavoritesOnly=true;renderList();};
 $("showAll").onclick=()=>{showFavoritesOnly=false;renderList();};
 
+let digiBoost=false;
 function updateSidModelButtons(){
   $("sid6581").classList.toggle("active",sidModel===6581);
   $("sid8580").classList.toggle("active",sidModel===8580);
+  $("digiBoostRow").style.display=(sidModel===8580)?"block":"none";
+  $("digiBoost").classList.toggle("active",sidModel===8580&&digiBoost);
+  $("digiBoost").textContent="DIGIBOOST: "+((sidModel===8580&&digiBoost)?"ON":"OFF");
 }
 function selectSidModel(model,announce=true){
+  const previous=sidModel;
   sidModel=(model===8580)?8580:6581;
+  if(previous!==sidModel)digiBoost=false;
   localStorage.setItem(SID_MODEL_KEY,String(sidModel));
   updateSidModelButtons();
   updateAndroidNowPlaying();
@@ -715,8 +721,15 @@ function selectSidModel(model,announce=true){
   if(announce) status("SID model "+sidModel+" selected.");
   return true;
 }
-$("sid6581").onclick=()=>selectSidModel(6581,true);
-$("sid8580").onclick=()=>selectSidModel(8580,true);
+$("sid6581").onclick=()=>{if(sidModel!==6581)selectSidModel(6581,true);};
+$("sid8580").onclick=()=>{if(sidModel!==8580)selectSidModel(8580,true);};
+$("digiBoost").onclick=()=>{
+  if(sidModel!==8580)return;
+  digiBoost=!digiBoost;
+  updateSidModelButtons();
+  android("nativeSetSidModel",8580);
+  status(digiBoost?"8580 DigiBoost ON · digi/sample sounds boosted.":"8580 DigiBoost OFF.");
+};
 updateSidModelButtons();
 selectSidModel(sidModel,false);
 
