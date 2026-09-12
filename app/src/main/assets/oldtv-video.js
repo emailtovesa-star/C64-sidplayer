@@ -168,7 +168,7 @@ function balloon(w,h,t){
  ctx.shadowBlur=12;
  ctx.shadowColor="#66e0ff";
 
- // Simple rounded balloon with the V4.0.31 colour scheme.
+ // Simple rounded balloon with the V4.0.32 colour scheme.
  ctx.fillStyle="#6f5cff";
  ctx.beginPath();
  ctx.ellipse(0,0,35,43,0,0,Math.PI*2);
@@ -233,49 +233,141 @@ function balloon(w,h,t){
  ctx.restore();
 }
 function fullMoon(w,h,t){
- const r=Math.max(34,Math.min(70,Math.min(w,h)*.085));
+ const r=Math.max(38,Math.min(76,Math.min(w,h)*.09));
  const x=w*.82;
  const y=h*.16;
+
  ctx.save();
 
- let halo=ctx.createRadialGradient(x,y,r*.55,x,y,r*1.8);
- halo.addColorStop(0,"rgba(255,250,225,.32)");
- halo.addColorStop(.5,"rgba(220,230,255,.12)");
- halo.addColorStop(1,"rgba(180,200,255,0)");
+ // Natural, restrained halo.
+ let halo=ctx.createRadialGradient(x,y,r*.75,x,y,r*1.75);
+ halo.addColorStop(0,"rgba(255,252,235,.18)");
+ halo.addColorStop(.55,"rgba(210,220,240,.07)");
+ halo.addColorStop(1,"rgba(190,205,230,0)");
  ctx.fillStyle=halo;
- ctx.beginPath();ctx.arc(x,y,r*1.8,0,Math.PI*2);ctx.fill();
+ ctx.beginPath();ctx.arc(x,y,r*1.75,0,Math.PI*2);ctx.fill();
 
- let g=ctx.createRadialGradient(x-r*.24,y-r*.28,r*.08,x,y,r);
- g.addColorStop(0,"#fffbe5");
- g.addColorStop(.42,"#f1edcf");
- g.addColorStop(.78,"#d8d2b4");
- g.addColorStop(1,"#b9b39a");
- ctx.fillStyle=g;
+ // Base lunar disc with subtle spherical shading.
+ let disc=ctx.createRadialGradient(x-r*.23,y-r*.26,r*.12,x+r*.06,y+r*.05,r*1.06);
+ disc.addColorStop(0,"#f8f5df");
+ disc.addColorStop(.45,"#e7e2c9");
+ disc.addColorStop(.78,"#d1cbb2");
+ disc.addColorStop(1,"#aaa58f");
+ ctx.fillStyle=disc;
  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
 
- const craters=[
-   [-.36,-.23,.18,.11,.18],[-.08,-.38,.11,.08,.14],[.27,-.28,.16,.10,.12],
-   [.33,.04,.20,.14,.14],[-.22,.18,.17,.12,.16],[.02,.32,.22,.13,.13],
-   [-.42,.38,.10,.07,.12],[.42,.36,.09,.06,.10]
+ // Clip all surface detail to the lunar disc.
+ ctx.save();
+ ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.clip();
+
+ // Broad maria: irregular darker basalt plains.
+ const maria=[
+   [-.24,-.23,.28,.19,-.28,.17],
+   [.22,-.14,.24,.16,.18,.15],
+   [.34,.18,.21,.15,-.35,.12],
+   [-.18,.18,.26,.18,.27,.13],
+   [.03,.33,.23,.13,-.08,.11],
+   [-.42,.05,.13,.10,.14,.10]
  ];
- for(const [cx,cy,rx,ry,a] of craters){
-   ctx.fillStyle=`rgba(95,92,82,${a})`;
-   ctx.beginPath();ctx.ellipse(x+cx*r,y+cy*r,rx*r,ry*r,-.25,0,Math.PI*2);ctx.fill();
+ for(const [mx,my,rx,ry,rot,a] of maria){
+   ctx.fillStyle=`rgba(72,74,72,${a})`;
+   ctx.beginPath();
+   ctx.ellipse(x+mx*r,y+my*r,rx*r,ry*r,rot,0,Math.PI*2);
+   ctx.fill();
  }
- const small=[
-   [-.15,-.05,.055],[.12,-.08,.045],[-.3,.03,.04],[.22,.22,.05],
-   [.03,-.23,.035],[-.08,.34,.04],[.36,-.05,.035]
+ // Break up maria edges so they don't look like simple ovals.
+ const mariaBits=[
+   [-.36,-.26,.10,.07,.10],[-.08,-.31,.08,.06,.10],[.31,-.23,.09,.06,.09],
+   [.18,-.04,.12,.08,.08],[-.33,.17,.10,.07,.08],[-.05,.22,.11,.07,.07],
+   [.18,.34,.10,.06,.07],[.42,.10,.07,.05,.07]
  ];
- for(const [cx,cy,rr] of small){
-   ctx.fillStyle="rgba(80,78,70,.18)";
-   ctx.beginPath();ctx.arc(x+cx*r,y+cy*r,rr*r,0,Math.PI*2);ctx.fill();
-   ctx.strokeStyle="rgba(255,255,245,.16)";
-   ctx.lineWidth=1;ctx.stroke();
+ for(const [mx,my,rx,ry,a] of mariaBits){
+   ctx.fillStyle=`rgba(68,70,68,${a})`;
+   ctx.beginPath();ctx.ellipse(x+mx*r,y+my*r,rx*r,ry*r,.2,0,Math.PI*2);ctx.fill();
  }
 
- ctx.strokeStyle="rgba(255,255,240,.55)";
- ctx.lineWidth=1.2;
- ctx.beginPath();ctx.arc(x,y,r-.6,0,Math.PI*2);ctx.stroke();
+ // Fine mottled regolith texture, deterministic so it doesn't shimmer frame to frame.
+ function hash(n){return Math.abs(Math.sin(n*91.917)*43758.5453)%1;}
+ for(let i=0;i<150;i++){
+   const ang=hash(i+1)*Math.PI*2;
+   const rad=Math.sqrt(hash(i+101))*r*.94;
+   const tx=x+Math.cos(ang)*rad;
+   const ty=y+Math.sin(ang)*rad;
+   const rr=(.6+hash(i+211)*2.2);
+   const light=hash(i+313);
+   ctx.fillStyle=light>.5
+     ? `rgba(255,255,245,${.018+hash(i+411)*.035})`
+     : `rgba(55,55,52,${.018+hash(i+511)*.035})`;
+   ctx.beginPath();ctx.arc(tx,ty,rr,0,Math.PI*2);ctx.fill();
+ }
+
+ // Prominent crater helper: darker floor, bright rim, small shadow.
+ function crater(cx,cy,cr,depth=1){
+   const px=x+cx*r,py=y+cy*r,rr=cr*r;
+   ctx.save();
+   ctx.shadowBlur=0;
+
+   // subtle ejecta halo
+   ctx.fillStyle=`rgba(245,243,224,${.035*depth})`;
+   ctx.beginPath();ctx.arc(px,py,rr*1.55,0,Math.PI*2);ctx.fill();
+
+   // crater bowl
+   let cg=ctx.createRadialGradient(px-rr*.25,py-rr*.28,rr*.1,px,py,rr);
+   cg.addColorStop(0,"rgba(235,232,213,.22)");
+   cg.addColorStop(.55,"rgba(110,108,98,.18)");
+   cg.addColorStop(1,"rgba(65,64,58,.34)");
+   ctx.fillStyle=cg;
+   ctx.beginPath();ctx.arc(px,py,rr,0,Math.PI*2);ctx.fill();
+
+   // sunward rim
+   ctx.strokeStyle=`rgba(255,252,232,${.34*depth})`;
+   ctx.lineWidth=Math.max(1,rr*.13);
+   ctx.beginPath();ctx.arc(px,py,rr*.9,Math.PI*.78,Math.PI*1.72);ctx.stroke();
+
+   // opposite inner shadow
+   ctx.strokeStyle=`rgba(55,54,50,${.30*depth})`;
+   ctx.lineWidth=Math.max(1,rr*.12);
+   ctx.beginPath();ctx.arc(px,py,rr*.78,-.15,Math.PI*.72);ctx.stroke();
+
+   ctx.restore();
+ }
+
+ crater(-.46,-.33,.075,.9);
+ crater(-.19,-.08,.055,.75);
+ crater(.06,-.36,.05,.75);
+ crater(.32,-.32,.07,.85);
+ crater(.43,.02,.055,.75);
+ crater(.25,.29,.072,.9);
+ crater(-.08,.37,.062,.8);
+ crater(-.38,.33,.05,.7);
+
+ // Tycho-like bright crater with faint rays.
+ const tx=x+.05*r,ty=y+.40*r,tr=.055*r;
+ for(let i=0;i<10;i++){
+   const a=i*Math.PI/5+.17;
+   ctx.strokeStyle="rgba(248,246,228,.055)";
+   ctx.lineWidth=1;
+   ctx.beginPath();
+   ctx.moveTo(tx+Math.cos(a)*tr,ty+Math.sin(a)*tr);
+   ctx.lineTo(tx+Math.cos(a)*r*.55,ty+Math.sin(a)*r*.55);
+   ctx.stroke();
+ }
+ crater(.05,.40,.055,1.05);
+
+ // Very subtle limb falloff for volume.
+ let limb=ctx.createRadialGradient(x-r*.18,y-r*.22,r*.18,x,y,r);
+ limb.addColorStop(.58,"rgba(0,0,0,0)");
+ limb.addColorStop(.9,"rgba(40,40,35,.05)");
+ limb.addColorStop(1,"rgba(30,30,28,.16)");
+ ctx.fillStyle=limb;
+ ctx.fillRect(x-r,y-r,r*2,r*2);
+
+ ctx.restore();
+
+ // Crisp but natural edge.
+ ctx.strokeStyle="rgba(255,253,238,.30)";
+ ctx.lineWidth=1;
+ ctx.beginPath();ctx.arc(x,y,r-.5,0,Math.PI*2);ctx.stroke();
 
  ctx.restore();
 }
