@@ -121,124 +121,63 @@ function dancer(cx,base,s,t,ph,dress,hair,skin,moveType){
  ctx.restore();
 }
 function balloon(w,h,t){
- // V4.0.28 fantasy neon balloon: curved multicolour panels, seams,
- // highlight, burner flame, rigging and woven basket.
- const travel=(t*21)%(w+230);
- const x=travel-115;
- const y=h*.19+Math.sin(t*.48)*20;
- const tilt=Math.sin(t*.37)*.055;
- const s=Math.max(.82,Math.min(1.18,Math.min(w/430,h/760)));
-
+ const x=((t*24)%(w+180))-90;
+ const y=h*.20+Math.sin(t*.55)*18;
  ctx.save();
- ctx.translate(x,y);
- ctx.rotate(tilt);
- ctx.scale(s,s);
+ ctx.shadowBlur=12;
+ ctx.shadowColor="#66e0ff";
 
- // soft neon aura
- ctx.shadowBlur=22;
- ctx.shadowColor="#ff63cf";
+ // Simple rounded balloon, like the earlier version, but with a new colour scheme.
+ ctx.fillStyle="#6f5cff";
+ ctx.beginPath();
+ ctx.ellipse(x,y,35,43,0,0,Math.PI*2);
+ ctx.fill();
 
- // envelope outer silhouette
- const envelope=()=>{
-   ctx.beginPath();
-   ctx.moveTo(0,-55);
-   ctx.bezierCurveTo(-35,-55,-52,-29,-49,-2);
-   ctx.bezierCurveTo(-46,24,-27,43,-13,49);
-   ctx.bezierCurveTo(-9,52,-7,57,-6,61);
-   ctx.lineTo(6,61);
-   ctx.bezierCurveTo(7,57,9,52,13,49);
-   ctx.bezierCurveTo(27,43,46,24,49,-2);
-   ctx.bezierCurveTo(52,-29,35,-55,0,-55);
-   ctx.closePath();
- };
+ // Left turquoise panel
+ ctx.fillStyle="#42e3d0";
+ ctx.beginPath();
+ ctx.moveTo(x-6,y-41);
+ ctx.lineTo(x-15,y+34);
+ ctx.lineTo(x-24,y+29);
+ ctx.lineTo(x-20,y-35);
+ ctx.closePath();
+ ctx.fill();
 
- // dark outline
- ctx.fillStyle="#24113d";
- envelope();ctx.fill();
- ctx.lineWidth=3;ctx.strokeStyle="#ffd86f";ctx.stroke();
+ // Centre yellow panel
+ ctx.fillStyle="#ffe36c";
+ ctx.beginPath();
+ ctx.moveTo(x-5,y-42);
+ ctx.lineTo(x+6,y-42);
+ ctx.lineTo(x+11,y+37);
+ ctx.lineTo(x-10,y+37);
+ ctx.closePath();
+ ctx.fill();
 
- // coloured curved panels clipped inside envelope
- ctx.save();
- envelope();ctx.clip();
- const panels=[
-   [-50,-27,"#ff4fae"],[-27,-10,"#8b5cff"],[-10,10,"#ffd34f"],
-   [10,27,"#3fdcf2"],[27,50,"#ff7b3d"]
- ];
- for(const [a,b,c] of panels){
-   const g=ctx.createLinearGradient(a,0,b,0);
-   g.addColorStop(0,"#35164f");
-   g.addColorStop(.18,c);
-   g.addColorStop(.72,c);
-   g.addColorStop(1,"#35164f");
-   ctx.fillStyle=g;
-   ctx.beginPath();
-   ctx.moveTo(a,-58);
-   ctx.bezierCurveTo(a-5,-20,a-4,25,a*.28,61);
-   ctx.lineTo(b*.28,61);
-   ctx.bezierCurveTo(b+4,25,b+5,-20,b,-58);
-   ctx.closePath();
-   ctx.fill();
- }
+ // Right coral panel
+ ctx.fillStyle="#ff7a72";
+ ctx.beginPath();
+ ctx.moveTo(x+8,y-40);
+ ctx.lineTo(x+22,y-32);
+ ctx.lineTo(x+25,y+27);
+ ctx.lineTo(x+13,y+35);
+ ctx.closePath();
+ ctx.fill();
 
- // horizontal decorative bands
- ctx.globalAlpha=.7;
- ctx.strokeStyle="#fff3a0";ctx.lineWidth=1.5;
- ctx.beginPath();ctx.moveTo(-45,-22);ctx.quadraticCurveTo(0,-10,45,-22);ctx.stroke();
- ctx.beginPath();ctx.moveTo(-38,18);ctx.quadraticCurveTo(0,31,38,18);ctx.stroke();
- ctx.globalAlpha=1;
+ // Small neck
+ ctx.fillStyle="#33205d";
+ ctx.fillRect(x-7,y+38,14,8);
 
- // glossy highlight
- const shine=ctx.createRadialGradient(-18,-25,1,-18,-25,27);
- shine.addColorStop(0,"rgba(255,255,255,.75)");
- shine.addColorStop(.35,"rgba(255,255,255,.20)");
- shine.addColorStop(1,"rgba(255,255,255,0)");
- ctx.fillStyle=shine;ctx.fillRect(-48,-54,60,70);
- ctx.restore();
+ // Ropes
+ line(x-13,y+38,x-8,y+55,1.5,"#d7c6a0");
+ line(x+13,y+38,x+8,y+55,1.5,"#d7c6a0");
 
- // panel seams
- ctx.shadowBlur=0;
- ctx.strokeStyle="rgba(31,14,57,.75)";ctx.lineWidth=1.6;
- for(const px of [-27,-10,10,27]){
-   ctx.beginPath();
-   ctx.moveTo(px,-50);
-   ctx.bezierCurveTo(px*.92,-18,px*.65,27,px*.25,57);
-   ctx.stroke();
- }
+ // Small basket
+ ctx.fillStyle="#8d5a2b";
+ ctx.fillRect(x-10,y+54,20,11);
 
- // lower collar
- ctx.fillStyle="#542b6d";
- ctx.beginPath();ctx.moveTo(-11,48);ctx.lineTo(11,48);ctx.lineTo(8,63);ctx.lineTo(-8,63);ctx.closePath();ctx.fill();
- ctx.strokeStyle="#ffc75f";ctx.stroke();
-
- // ropes
- ctx.strokeStyle="#d8c092";ctx.lineWidth=1.6;
- ctx.beginPath();ctx.moveTo(-8,60);ctx.lineTo(-15,88);ctx.stroke();
- ctx.beginPath();ctx.moveTo(8,60);ctx.lineTo(15,88);ctx.stroke();
- ctx.beginPath();ctx.moveTo(-4,61);ctx.lineTo(-7,88);ctx.stroke();
- ctx.beginPath();ctx.moveTo(4,61);ctx.lineTo(7,88);ctx.stroke();
-
- // animated burner + glow
- const flame=7+Math.sin(t*12)*3;
- ctx.shadowBlur=15;ctx.shadowColor="#ff9d32";
- ctx.fillStyle="#ff5b31";
- ctx.beginPath();ctx.moveTo(-5,69);ctx.quadraticCurveTo(0,69-flame,5,69);ctx.quadraticCurveTo(0,77,-5,69);ctx.fill();
- ctx.fillStyle="#ffe76b";
- ctx.beginPath();ctx.moveTo(-2.5,69);ctx.quadraticCurveTo(0,64,2.5,69);ctx.quadraticCurveTo(0,73,-2.5,69);ctx.fill();
-
- // basket with rounded shape
- ctx.shadowBlur=8;ctx.shadowColor="#000";
- ctx.fillStyle="#8b542b";
- ctx.beginPath();ctx.moveTo(-18,88);ctx.lineTo(18,88);ctx.lineTo(14,106);ctx.quadraticCurveTo(0,111,-14,106);ctx.closePath();ctx.fill();
- ctx.strokeStyle="#d59a55";ctx.lineWidth=2;ctx.stroke();
-
- // woven basket detail
- ctx.lineWidth=1;ctx.strokeStyle="#d8a96a";ctx.globalAlpha=.8;
- for(let yy=93;yy<=103;yy+=5){ctx.beginPath();ctx.moveTo(-16,yy);ctx.lineTo(16,yy);ctx.stroke();}
- for(let xx=-11;xx<=11;xx+=7){ctx.beginPath();ctx.moveTo(xx,89);ctx.lineTo(xx*.8,107);ctx.stroke();}
- ctx.globalAlpha=1;
-
- // tiny basket rim
- ctx.fillStyle="#4b2a18";ctx.fillRect(-19,86,38,4);
+ // Subtle basket rim
+ ctx.fillStyle="#4b2a18";
+ ctx.fillRect(x-11,y+52,22,3);
 
  ctx.restore();
 }
