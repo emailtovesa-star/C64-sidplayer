@@ -1,5 +1,20 @@
 plugins { id("com.android.application") }
-android { namespace = "com.example.c64sidplayersimple"; compileSdk = 35
- defaultConfig { ndk { abiFilters += listOf("arm64-v8a") }; applicationId = "com.example.c64sidplayersimple"; minSdk = 23; targetSdk = 35; versionCode = 442; versionName = "4.0.23" }
- externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } } }
+android {
+    namespace = "com.example.c64sidplayersimple"
+    compileSdk = 35
+    defaultConfig {
+        ndk { abiFilters += listOf("arm64-v8a") }
+        applicationId = "com.example.c64sidplayersimple"
+        minSdk = 23
+        targetSdk = 35
+        versionCode = 443
+        versionName = "4.0.23"
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+}
 dependencies { implementation("androidx.webkit:webkit:1.12.1") }
