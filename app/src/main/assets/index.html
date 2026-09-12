@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.33</title>
+<title>C64 SID Player V4.0.23</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -139,7 +139,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 <div class="logoZone" aria-label="C64 SID Player">
   <div id="starField" class="starField" aria-hidden="true"></div>
   <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
-  <div class="sub">V4.0.33</div>
+  <div class="sub">V4.0.23</div>
 </div>
 <div class="panel">
 <div class="screen">
@@ -246,10 +246,11 @@ function idbTxDone(tx){
 
 async function savePlaylist(){
   try{
-    status("Saving playlist: 0 / "+queue.length+"...");
+    const total=queue.length;
+    status("Saving playlist: 0 / "+total+"...");
     const db=await openPlaylistDb();
 
-    // Clear old track records first.
+    // Clear the previous snapshot once.
     {
       const tx=db.transaction([PLAYLIST_TRACK_STORE,PLAYLIST_META_STORE],"readwrite");
       tx.objectStore(PLAYLIST_TRACK_STORE).clear();
@@ -257,36 +258,46 @@ async function savePlaylist(){
       await idbTxDone(tx);
     }
 
-    // Store each SID as its own IndexedDB record.
-    // This avoids one huge structured-clone object, which can fail with large playlists.
-    const BATCH=20;
-    for(let base=0;base<queue.length;base+=BATCH){
-      const end=Math.min(queue.length,base+BATCH);
-      const prepared=[];
-      for(let i=base;i<end;i++){
-        const q=queue[i];
-        const bytes=await ensureBytes(q);
-        prepared.push({
-          index:i,
-          name:q.file.name,
-          bytes:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)
-        });
-      }
+    // Faster save path:
+    // - prepare SID data in parallel instead of reading every file one-by-one
+    // - use much larger IndexedDB batches, so there are far fewer transactions
+    // - avoid copying ArrayBuffers when the Uint8Array already owns the whole buffer
+    const BATCH=128;
+
+    for(let base=0;base<total;base+=BATCH){
+      const end=Math.min(total,base+BATCH);
+
+      const prepared=await Promise.all(
+        queue.slice(base,end).map(async(q,offset)=>{
+          const bytes=await ensureBytes(q);
+          const fullBuffer=
+            (bytes.byteOffset===0 && bytes.byteLength===bytes.buffer.byteLength)
+              ? bytes.buffer
+              : bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
+          return {
+            index:base+offset,
+            name:q.file.name,
+            bytes:fullBuffer
+          };
+        })
+      );
 
       const tx=db.transaction(PLAYLIST_TRACK_STORE,"readwrite");
       const store=tx.objectStore(PLAYLIST_TRACK_STORE);
       for(const item of prepared) store.put(item,item.index);
       await idbTxDone(tx);
 
-      status("Saving playlist: "+end+" / "+queue.length+"...");
-      // Yield briefly so Android WebView stays responsive with very large playlists.
-      await new Promise(r=>setTimeout(r,0));
+      status("Saving playlist: "+end+" / "+total+"...");
+
+      // Yield only between large batches to keep Android WebView responsive
+      // without slowing down the save with dozens of tiny pauses.
+      if(end<total) await new Promise(r=>setTimeout(r,0));
     }
 
     {
       const tx=db.transaction(PLAYLIST_META_STORE,"readwrite");
       tx.objectStore(PLAYLIST_META_STORE).put({
-        count:queue.length,
+        count:total,
         savedAt:Date.now(),
         format:2
       },"last");
@@ -294,7 +305,7 @@ async function savePlaylist(){
     }
 
     db.close();
-    status("Playlist saved: "+queue.length+" SID file"+(queue.length===1?"":"s")+".");
+    status("Playlist saved: "+total+" SID file"+(total===1?"":"s")+".");
   }catch(e){
     console.warn("Playlist save failed",e);
     status("Playlist save failed: "+(e&&e.message?e.message:String(e)));
@@ -795,7 +806,6 @@ setInterval(()=>{
 <script src="tv-power-small-red-corner.js"></script>
 <script src="tv-power-glossy-red.js"></script>
 <script src="oldtv-tetris.js"></script>
-<script src="oldtv-video.js"></script>
 <script src="blockdrop-stars-color.js"></script>
 </body>
 </html>
