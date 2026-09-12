@@ -1,6 +1,7 @@
 (() => {
 "use strict";
 let overlay=null,canvas=null,ctx=null,raf=0,stars=[],oldOverflow="";
+let balloonFalling=false,balloonFallY=0,balloonFallV=0,balloonLast={x:-9999,y:-9999,rx:44,ry:58},balloonResetAt=0;
 const STAR_COLORS=["#ffffff","#8fe8ff","#72a7ff","#b98cff","#ff7ad9","#ff8585","#ffd86f","#8dff9e","#ff9f43","#69edff"];
 
 function styles(){
@@ -23,7 +24,7 @@ function makeOverlay(){
  overlay=document.createElement("div");overlay.className="oldTvRetroVideoOverlay";overlay.id="oldTvRetroVideoOverlay";
  overlay.innerHTML='<canvas id="oldTvRetroVideoCanvas"></canvas><button class="retroExit" aria-label="Exit show">×</button>';
  document.body.appendChild(overlay);canvas=overlay.querySelector("canvas");ctx=canvas.getContext("2d");
- overlay.querySelector(".retroExit").onclick=closeVideo;window.addEventListener("resize",resize);
+ overlay.querySelector(".retroExit").onclick=closeVideo;canvas.addEventListener("pointerdown",hitBalloon);window.addEventListener("resize",resize);
 }
 function resize(){
  const d=Math.max(1,Math.min(2,devicePixelRatio||1)),w=innerWidth,h=innerHeight;
@@ -120,64 +121,113 @@ function dancer(cx,base,s,t,ph,dress,hair,skin,moveType){
  }
  ctx.restore();
 }
+function hitBalloon(e){
+ if(balloonFalling)return;
+ const r=canvas.getBoundingClientRect();
+ const px=e.clientX-r.left,py=e.clientY-r.top;
+ const dx=(px-balloonLast.x)/balloonLast.rx;
+ const dy=(py-balloonLast.y)/balloonLast.ry;
+ if(dx*dx+dy*dy<=1.15){
+   balloonFalling=true;
+   balloonFallY=balloonLast.y;
+   balloonFallV=30;
+   balloonResetAt=0;
+ }
+}
 function balloon(w,h,t){
- const x=((t*24)%(w+180))-90;
- const y=h*.20+Math.sin(t*.55)*18;
+ const flyX=((t*24)%(w+180))-90;
+ const flyY=h*.20+Math.sin(t*.55)*18;
+
+ let x=flyX,y=flyY,tilt=0;
+ if(balloonFalling){
+   const dt=1/60;
+   balloonFallV+=520*dt;
+   balloonFallY+=balloonFallV*dt;
+   y=balloonFallY;
+   x=flyX+Math.sin(t*7)*8;
+   tilt=Math.min(.85,balloonFallV/700)*Math.sin(t*5);
+
+   if(y>h+85){
+     if(!balloonResetAt)balloonResetAt=t;
+     if(t-balloonResetAt>.75){
+       balloonFalling=false;
+       balloonFallV=0;
+       balloonResetAt=0;
+       balloonFallY=0;
+       y=flyY;
+     }
+   }
+ }
+
+ balloonLast={x,y,rx:44,ry:60};
+
  ctx.save();
+ ctx.translate(x,y);
+ ctx.rotate(tilt);
  ctx.shadowBlur=12;
  ctx.shadowColor="#66e0ff";
 
- // Simple rounded balloon, like the earlier version, but with a new colour scheme.
+ // Simple rounded balloon with the V4.0.30 colour scheme.
  ctx.fillStyle="#6f5cff";
  ctx.beginPath();
- ctx.ellipse(x,y,35,43,0,0,Math.PI*2);
+ ctx.ellipse(0,0,35,43,0,0,Math.PI*2);
  ctx.fill();
 
  // Left turquoise panel
  ctx.fillStyle="#42e3d0";
  ctx.beginPath();
- ctx.moveTo(x-6,y-41);
- ctx.lineTo(x-15,y+34);
- ctx.lineTo(x-24,y+29);
- ctx.lineTo(x-20,y-35);
+ ctx.moveTo(-6,-41);
+ ctx.lineTo(-15,34);
+ ctx.lineTo(-24,29);
+ ctx.lineTo(-20,-35);
  ctx.closePath();
  ctx.fill();
 
  // Centre yellow panel
  ctx.fillStyle="#ffe36c";
  ctx.beginPath();
- ctx.moveTo(x-5,y-42);
- ctx.lineTo(x+6,y-42);
- ctx.lineTo(x+11,y+37);
- ctx.lineTo(x-10,y+37);
+ ctx.moveTo(-5,-42);
+ ctx.lineTo(6,-42);
+ ctx.lineTo(11,37);
+ ctx.lineTo(-10,37);
  ctx.closePath();
  ctx.fill();
 
  // Right coral panel
  ctx.fillStyle="#ff7a72";
  ctx.beginPath();
- ctx.moveTo(x+8,y-40);
- ctx.lineTo(x+22,y-32);
- ctx.lineTo(x+25,y+27);
- ctx.lineTo(x+13,y+35);
+ ctx.moveTo(8,-40);
+ ctx.lineTo(22,-32);
+ ctx.lineTo(25,27);
+ ctx.lineTo(13,35);
  ctx.closePath();
  ctx.fill();
 
- // Small neck
+ // Neck, ropes and basket
  ctx.fillStyle="#33205d";
- ctx.fillRect(x-7,y+38,14,8);
-
- // Ropes
- line(x-13,y+38,x-8,y+55,1.5,"#d7c6a0");
- line(x+13,y+38,x+8,y+55,1.5,"#d7c6a0");
-
- // Small basket
+ ctx.fillRect(-7,38,14,8);
+ line(-13,38,-8,55,1.5,"#d7c6a0");
+ line(13,38,8,55,1.5,"#d7c6a0");
  ctx.fillStyle="#8d5a2b";
- ctx.fillRect(x-10,y+54,20,11);
-
- // Subtle basket rim
+ ctx.fillRect(-10,54,20,11);
  ctx.fillStyle="#4b2a18";
- ctx.fillRect(x-11,y+52,22,3);
+ ctx.fillRect(-11,52,22,3);
+
+ // While falling, add a tiny motion streak beneath the basket.
+ if(balloonFalling){
+   ctx.globalAlpha=.35;
+   ctx.strokeStyle="#ffd86f";
+   ctx.lineWidth=2;
+   ctx.beginPath();
+   ctx.moveTo(-5,72);
+   ctx.lineTo(-5,92+Math.min(40,balloonFallV*.04));
+   ctx.stroke();
+   ctx.beginPath();
+   ctx.moveTo(5,72);
+   ctx.lineTo(5,88+Math.min(34,balloonFallV*.035));
+   ctx.stroke();
+   ctx.globalAlpha=1;
+ }
 
  ctx.restore();
 }
@@ -210,7 +260,7 @@ function draw(now){
  dancer(w*.78,base,s,t,4.2,"#a96cff","#ff9f43","#f3c6a8",2);
  vhs(w,h);raf=requestAnimationFrame(draw)
 }
-function openVideo(){makeOverlay();oldOverflow=document.body.style.overflow;document.body.style.overflow="hidden";overlay.classList.add("show");resize();if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(draw);try{document.documentElement.requestFullscreen?.().catch(()=>{})}catch(e){}}
+function openVideo(){makeOverlay();balloonFalling=false;balloonFallY=0;balloonFallV=0;balloonResetAt=0;oldOverflow=document.body.style.overflow;document.body.style.overflow="hidden";overlay.classList.add("show");resize();if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(draw);try{document.documentElement.requestFullscreen?.().catch(()=>{})}catch(e){}}
 function closeVideo(){if(raf){cancelAnimationFrame(raf);raf=0}overlay.classList.remove("show");document.body.style.overflow=oldOverflow;try{if(document.fullscreenElement)document.exitFullscreen?.().catch(()=>{})}catch(e){}}
 function init(){styles();makeOverlay();if(addButton())return;const o=new MutationObserver(()=>{if(addButton())o.disconnect()});o.observe(document.documentElement,{childList:true,subtree:true})}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
