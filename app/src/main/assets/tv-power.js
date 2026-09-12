@@ -359,16 +359,27 @@
     // The src is assigned only on first touch, avoiding GIF decode work at app startup.
     const retroTvTouchScreen = stage.querySelector("#retroTvTouchScreen");
     const retroTvGif = stage.querySelector("#retroTvGif");
-    let retroTvGifStarted = false;
+    let retroTvDisplayMode = 0; // 0=original TV, 1=moving stripes, 2=C64 screen
     if (retroTvTouchScreen && retroTvGif) {
       retroTvTouchScreen.addEventListener("click", e => {
         e.preventDefault();
         e.stopPropagation();
-        if (!retroTvGifStarted) {
+
+        retroTvDisplayMode = (retroTvDisplayMode + 1) % 3;
+
+        if (retroTvDisplayMode === 0) {
+          // Back to the original unlit TV picture.
+          retroTvTouchScreen.classList.remove("gifPlaying");
+          retroTvGif.removeAttribute("src");
+        } else if (retroTvDisplayMode === 1) {
+          // Fast top-to-bottom moving stripes.
           retroTvGif.src = "retro-tv-animation.gif";
-          retroTvGifStarted = true;
+          retroTvTouchScreen.classList.add("gifPlaying");
+        } else {
+          // User-supplied Commodore 64 READY screen.
+          retroTvGif.src = "retro-tv-c64-screen.gif";
+          retroTvTouchScreen.classList.add("gifPlaying");
         }
-        retroTvTouchScreen.classList.add("gifPlaying");
       });
     }
 
