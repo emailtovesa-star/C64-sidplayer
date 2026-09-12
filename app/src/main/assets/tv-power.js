@@ -368,16 +368,16 @@
         retroTvDisplayMode = (retroTvDisplayMode + 1) % 3;
 
         if (retroTvDisplayMode === 0) {
-          // Back to the original unlit TV picture.
+          // Original unlit TV picture.
           retroTvTouchScreen.classList.remove("gifPlaying");
           retroTvGif.removeAttribute("src");
         } else if (retroTvDisplayMode === 1) {
-          // Fast top-to-bottom moving stripes.
-          retroTvGif.src = "retro-tv-animation.gif";
+          // C64 BASIC screen animation.
+          retroTvGif.src = "retro-tv-c64-screen.gif";
           retroTvTouchScreen.classList.add("gifPlaying");
         } else {
-          // User-supplied Commodore 64 READY screen.
-          retroTvGif.src = "retro-tv-c64-screen.gif";
+          // Shortened stripes / MP4-derived animation.
+          retroTvGif.src = "retro-tv-animation.gif";
           retroTvTouchScreen.classList.add("gifPlaying");
         }
       });
