@@ -711,6 +711,21 @@ function openGame(){
   overlay.classList.add("show");
   overlay.setAttribute("aria-hidden","false");
   startStarfield();
+
+  // Preserve a paused game across EXIT. Restart the animation loop in
+  // paused mode so the RESUME button works when the game is opened again.
+  if(running && paused && !gameOver){
+    if(pauseBtn){
+      pauseBtn.textContent="RESUME";
+      pauseBtn.classList.add("active");
+    }
+    messageEl.innerHTML="PAUSED";
+    messageEl.classList.remove("hidden");
+    lastDrop=performance.now();
+    if(raf) cancelAnimationFrame(raf);
+    raf=requestAnimationFrame(loop);
+  }
+
   draw();
   drawNext();
   try{
@@ -723,7 +738,19 @@ function openGame(){
 function closeGame(){
   stopStarfield();
   if(!overlay) return;
-  running=false;
+
+  // Keep the current game state. Leaving Block Drop pauses an active game
+  // instead of destroying it, so it can be resumed after returning.
+  if(running && !gameOver){
+    paused=true;
+    messageEl.innerHTML="PAUSED";
+    messageEl.classList.remove("hidden");
+    if(pauseBtn){
+      pauseBtn.textContent="RESUME";
+      pauseBtn.classList.add("active");
+    }
+  }
+
   if(raf){cancelAnimationFrame(raf);raf=0;}
   overlay.classList.remove("show");
   overlay.setAttribute("aria-hidden","true");
