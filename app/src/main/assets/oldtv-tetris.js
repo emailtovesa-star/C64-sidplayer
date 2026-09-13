@@ -29,6 +29,8 @@ let score = 0;
 let lines = 0;
 let level = 1;
 let oldBodyOverflow = "";
+let equalizerEnabled = false;
+let equalizerPhase = 0;
 
 const COLS = 10, ROWS = 20;
 const COLORS = [
@@ -208,6 +210,28 @@ function addStyles(){
       box-shadow:0 8px 28px #000c;
     }
     .otMessage.hidden{display:none}
+    .otEqHint{
+      position:absolute;
+      left:50%;
+      bottom:8px;
+      transform:translateX(-50%);
+      z-index:5;
+      padding:4px 8px;
+      border:1px solid #7772ec;
+      border-radius:7px;
+      background:#07071ccc;
+      color:#b9c8ff;
+      font:bold 9px monospace;
+      pointer-events:none;
+      opacity:.78;
+      text-shadow:0 0 5px #6a7cff;
+      white-space:nowrap;
+    }
+    .otEqHint.on{
+      color:#fff19a;
+      border-color:#ffe36c;
+      text-shadow:0 0 6px #ffe36c;
+    }
     .otControls{
       display:grid;
       grid-template-columns:repeat(5,1fr);
@@ -299,7 +323,7 @@ function makeOverlay(){
       </div>
       <div class="otCanvasWrap">
         <canvas id="oldTvTetrisCanvas" width="240" height="480"></canvas>
-        <div class="otMessage" id="otMessage">PRESS START</div>
+        <div class="otMessage" id="otMessage">PRESS START</div><div class="otEqHint" id="otEqHint">TOUCH GAME SCREEN: EQ OFF</div>
       </div>
       <div class="otControls">
         <button class="otCtrl" data-act="left" type="button">◀<small>LEFT</small></button>
@@ -322,6 +346,18 @@ function makeOverlay(){
   nextCtx=nextCanvas.getContext("2d");
   pauseBtn=overlay.querySelector("#otPause");
   starCanvas=overlay.querySelector("#otStarfield");
+
+  const eqHint=overlay.querySelector("#otEqHint");
+  canvas.addEventListener("pointerdown",e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    equalizerEnabled=!equalizerEnabled;
+    if(eqHint){
+      eqHint.textContent="TOUCH GAME SCREEN: EQ "+(equalizerEnabled?"ON":"OFF");
+      eqHint.classList.toggle("on",equalizerEnabled);
+    }
+    draw();
+  });
   starCtx=starCanvas.getContext("2d");
   resizeStarfield();
 
@@ -616,6 +652,47 @@ function togglePause(){
   }
 }
 
+function drawEqualizer(){
+  if(!equalizerEnabled||!ctx||!canvas) return;
+
+  equalizerPhase += 0.11;
+  const barCount=18;
+  const gap=3;
+  const bw=(canvas.width-(barCount+1)*gap)/barCount;
+  const maxH=canvas.height*.42;
+  const baseY=canvas.height-5;
+
+  ctx.save();
+  ctx.globalCompositeOperation="screen";
+
+  for(let i=0;i<barCount;i++){
+    const wave1=(Math.sin(equalizerPhase*2.1+i*.72)+1)*.5;
+    const wave2=(Math.sin(equalizerPhase*3.7+i*1.23)+1)*.5;
+    const wave3=(Math.sin(equalizerPhase*1.25+i*.39)+1)*.5;
+    const level=.12 + (.43*wave1 + .30*wave2 + .15*wave3);
+    const h=Math.max(7,maxH*Math.min(1,level));
+    const x=gap+i*(bw+gap);
+
+    const hue=(i*22 + equalizerPhase*34)%360;
+    const grad=ctx.createLinearGradient(0,baseY-h,0,baseY);
+    grad.addColorStop(0,`hsla(${(hue+55)%360},100%,72%,.88)`);
+    grad.addColorStop(.48,`hsla(${hue},100%,58%,.68)`);
+    grad.addColorStop(1,`hsla(${(hue+300)%360},100%,48%,.35)`);
+
+    ctx.shadowBlur=9;
+    ctx.shadowColor=`hsla(${hue},100%,65%,.8)`;
+    ctx.fillStyle=grad;
+    ctx.fillRect(x,baseY-h,bw,h);
+
+    ctx.globalAlpha=.28;
+    ctx.fillStyle="#050513";
+    for(let y=baseY-5;y>baseY-h;y-=9) ctx.fillRect(x,y,bw,2);
+    ctx.globalAlpha=1;
+  }
+
+  ctx.restore();
+}
+
 function draw(){
   if(!ctx) return;
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -627,6 +704,8 @@ function draw(){
   ctx.lineWidth=1;
   for(let x=1;x<COLS;x++){ctx.beginPath();ctx.moveTo(x*w,0);ctx.lineTo(x*w,canvas.height);ctx.stroke();}
   for(let y=1;y<ROWS;y++){ctx.beginPath();ctx.moveTo(0,y*h);ctx.lineTo(canvas.width,y*h);ctx.stroke();}
+
+  drawEqualizer();
 
   board.forEach((row,y)=>row.forEach((v,x)=>{if(v)cell(x,y,v)}));
 
