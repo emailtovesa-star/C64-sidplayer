@@ -221,28 +221,6 @@ function addStyles(){
       image-rendering:auto;
     }
     .otC64Art.on{opacity:.46}
-    .otEqHint{
-      position:absolute;
-      left:50%;
-      bottom:8px;
-      transform:translateX(-50%);
-      z-index:5;
-      padding:4px 8px;
-      border:1px solid #7772ec;
-      border-radius:7px;
-      background:#07071ccc;
-      color:#b9c8ff;
-      font:bold 9px monospace;
-      pointer-events:none;
-      opacity:.78;
-      text-shadow:0 0 5px #6a7cff;
-      white-space:nowrap;
-    }
-    .otEqHint.on{
-      color:#fff19a;
-      border-color:#ffe36c;
-      text-shadow:0 0 6px #ffe36c;
-    }
     .otControls{
       display:grid;
       grid-template-columns:repeat(5,1fr);
@@ -334,7 +312,7 @@ function makeOverlay(){
       </div>
       <div class="otCanvasWrap">
         <canvas id="oldTvTetrisCanvas" width="240" height="480"></canvas>
-        <div class="otMessage" id="otMessage">PRESS START</div><img class="otC64Art" id="otC64Art" src="blockdrop-c64-art.png" alt=""><div class="otEqHint" id="otEqHint">TOUCH GAME SCREEN: ART OFF</div>
+        <div class="otMessage" id="otMessage">PRESS START</div><img class="otC64Art" id="otC64Art" src="blockdrop-c64-art.png" alt="">
       </div>
       <div class="otControls">
         <button class="otCtrl" data-act="left" type="button">◀<small>LEFT</small></button>
@@ -358,7 +336,6 @@ function makeOverlay(){
   pauseBtn=overlay.querySelector("#otPause");
   starCanvas=overlay.querySelector("#otStarfield");
 
-  const eqHint=overlay.querySelector("#otEqHint");
   const c64Art=overlay.querySelector("#otC64Art");
   let c64ArtEnabled=false;
   canvas.addEventListener("pointerdown",e=>{
@@ -366,10 +343,6 @@ function makeOverlay(){
     e.stopPropagation();
     c64ArtEnabled=!c64ArtEnabled;
     if(c64Art)c64Art.classList.toggle("on",c64ArtEnabled);
-    if(eqHint){
-      eqHint.textContent="TOUCH GAME SCREEN: ART "+(c64ArtEnabled?"ON":"OFF");
-      eqHint.classList.toggle("on",c64ArtEnabled);
-    }
   });
   starCtx=starCanvas.getContext("2d");
   resizeStarfield();
