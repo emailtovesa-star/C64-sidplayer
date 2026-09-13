@@ -29,6 +29,7 @@ let score = 0;
 let lines = 0;
 let level = 1;
 let oldBodyOverflow = "";
+let solidBlockMode = false;
 
 const COLS = 10, ROWS = 20;
 const COLORS = [
@@ -338,9 +339,33 @@ function makeOverlay(){
 
   const c64Art=overlay.querySelector("#otC64Art");
   let c64ArtEnabled=false;
+
+  function touchedBlock(e){
+    const r=canvas.getBoundingClientRect();
+    if(!r.width||!r.height)return false;
+    const cx=(e.clientX-r.left)*(canvas.width/r.width);
+    const cy=(e.clientY-r.top)*(canvas.height/r.height);
+    const gx=Math.floor(cx/(canvas.width/COLS));
+    const gy=Math.floor(cy/(canvas.height/ROWS));
+    if(gx<0||gx>=COLS||gy<0||gy>=ROWS)return false;
+    if(board?.[gy]?.[gx])return true;
+    if(current){
+      const px=gx-current.x, py=gy-current.y;
+      if(py>=0&&py<current.shape.length&&px>=0&&px<current.shape[py].length&&current.shape[py][px])return true;
+    }
+    return false;
+  }
+
   canvas.addEventListener("pointerdown",e=>{
     e.preventDefault();
     e.stopPropagation();
+
+    if(touchedBlock(e)){
+      solidBlockMode=!solidBlockMode;
+      draw();
+      return;
+    }
+
     c64ArtEnabled=!c64ArtEnabled;
     if(c64Art)c64Art.classList.toggle("on",c64ArtEnabled);
   });
@@ -497,10 +522,12 @@ function cell(x,y,c,alpha=1){
   ctx.globalAlpha=alpha;
   ctx.fillStyle=COLORS[c]||"#fff";
   ctx.fillRect(px+1,py+1,w-2,h-2);
-  ctx.fillStyle="rgba(255,255,255,.20)";
-  ctx.fillRect(px+2,py+2,w-4,3);
-  ctx.fillStyle="rgba(0,0,0,.25)";
-  ctx.fillRect(px+w-4,py+3,2,h-6);
+  if(!solidBlockMode){
+    ctx.fillStyle="rgba(255,255,255,.20)";
+    ctx.fillRect(px+2,py+2,w-4,3);
+    ctx.fillStyle="rgba(0,0,0,.25)";
+    ctx.fillRect(px+w-4,py+3,2,h-6);
+  }
   ctx.globalAlpha=1;
 }
 
@@ -654,11 +681,13 @@ function draw(){
   board.forEach((row,y)=>row.forEach((v,x)=>{if(v)cell(x,y,v)}));
 
   if(current){
-    let ghostY=current.y;
-    while(!collide({...current,y:ghostY},0,1)) ghostY++;
-    current.shape.forEach((row,y)=>row.forEach((v,x)=>{
-      if(v && ghostY+y>=0) cell(current.x+x,ghostY+y,current.color,.18);
-    }));
+    if(!solidBlockMode){
+      let ghostY=current.y;
+      while(!collide({...current,y:ghostY},0,1)) ghostY++;
+      current.shape.forEach((row,y)=>row.forEach((v,x)=>{
+        if(v && ghostY+y>=0) cell(current.x+x,ghostY+y,current.color,.18);
+      }));
+    }
     current.shape.forEach((row,y)=>row.forEach((v,x)=>{
       if(v && current.y+y>=0) cell(current.x+x,current.y+y,current.color,1);
     }));
