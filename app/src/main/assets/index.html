@@ -644,8 +644,13 @@ function stop(){
 async function changeSub(delta){
   const q=queue[current]; if(!q||!q.header)return;
   const max=Math.max(1,q.header.songs||1);
-  const n=Math.max(0,Math.min(max-1,activeSub+delta));
-  await loadSong(current,true,n);
+  const target=activeSub+delta;
+
+  // At the first/last subtune boundary, do nothing.
+  // This avoids reloading and restarting the current subtune.
+  if(target<0 || target>=max)return;
+
+  await loadSong(current,true,target);
 }
 function changeSong(delta){
   if(!queue.length)return;
