@@ -7,9 +7,14 @@ android {
         applicationId = "com.example.c64sidplayersimple"
         minSdk = 23
         targetSdk = 35
-        versionCode = 456
+        versionCode = 453
         versionName = "4.0.23"
     }
-    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 }
 dependencies { implementation("androidx.webkit:webkit:1.12.1") }
