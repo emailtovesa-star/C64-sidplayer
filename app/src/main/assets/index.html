@@ -117,6 +117,12 @@ animation:flyNote linear infinite}
 button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color:#fff;min-height:45px;font:bold 13px monospace;padding:8px}
 .load{display:flex;align-items:center;justify-content:center;margin-top:10px}input[type=file]{display:none}
 .list{margin-top:10px;background:#08072c;border:1px solid #4e49ae;border-radius:8px;max-height:220px;overflow:auto}
+.playlistSearch{display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:10px}
+.playlistSearch input{min-width:0;min-height:42px;border:2px solid #7772ec;border-radius:8px;background:#08072c;color:#fff;padding:8px 10px;font:bold 13px monospace;outline:none}
+.playlistSearch input:focus{border-color:#ffe36c}
+.playlistSearch button{min-height:42px;padding:6px 10px}
+.playlistSearchCount{margin-top:5px;color:#b9b8e8;font-size:10px;text-align:right;min-height:12px}
+
 .item{padding:9px;border-bottom:1px solid #292668;display:grid;grid-template-columns:1fr auto auto;gap:7px;align-items:center}
 .item.current{background:#302a92}.item:last-child{border-bottom:0}
 .itemName{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
@@ -125,12 +131,6 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 .itemBtn.del{color:#ff9a9a}
 .playlistTools{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
 .playlistTools .load,.playlistTools button{margin-top:0}
-.playlistSortTools{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:7px}
-.playlistSortTools button{min-height:38px;font-size:11px}
-.playlistSortTools button.active{background:#4c469f;border-color:#ffe36c;color:#ffe36c}
-.itemText{min-width:0}
-.itemMeta{margin-top:3px;color:#9ea9df;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
 .sidModelPanel{margin-top:10px;background:#09082d;border:1px solid #4e49ae;border-radius:9px;padding:9px}
 .sidModelLabel{text-align:center;color:#ffe36c;font:bold 12px monospace;margin-bottom:7px}
 .sidModelButtons{display:grid;grid-template-columns:1fr 1fr;gap:7px}
@@ -183,10 +183,11 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
   <button id="showFavs">SHOW FAVORITES</button>
   <button id="showAll">SHOW ALL</button>
 </div>
-<div class="playlistSortTools">
-  <button id="sortTitle">SORT BY TITLE</button>
-  <button id="sortAuthor">SORT BY AUTHOR</button>
+<div class="playlistSearch">
+  <input id="playlistSearchInput" type="search" placeholder="SEARCH SONG OR AUTHOR" autocomplete="off" spellcheck="false">
+  <button id="playlistSearchClear" type="button">CLEAR</button>
 </div>
+<div class="playlistSearchCount" id="playlistSearchCount"></div>
 <div class="list" id="list"><div class="item">No tunes loaded.</div></div>
 <div class="status" id="status">Starting worker + native AudioTrack pipeline…</div>
 <div class="badge">Native Android reSIDfp engine · Background-safe AudioTrack · HVSC exact loop</div>
@@ -205,7 +206,7 @@ let durationSec=null, playStartedAt=0, accumulatedPlaySec=0;
 let audioClockAvailable=false;
 let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false, playlistRestored=false;
 let showFavoritesOnly=false;
-let playlistSortMode="title";
+let playlistSearchQuery="";
 const FAVORITES_KEY="c64_sid_player_favorites_v1";
 const BW_MODE_KEY="c64_sid_player_bw_mode_v1";
 const SID_MODEL_KEY="c64_sid_player_sid_model_v1";
@@ -377,11 +378,10 @@ async function restorePlaylist(){
           name:it.name,
           arrayBuffer:async()=>stored.slice(0)
         };
-        const restoredBytes=new Uint8Array(stored);
         restored.push({
           file:fileLike,
-          bytes:restoredBytes,
-          header:metadataFromSidBytes(restoredBytes,it.name)
+          bytes:new Uint8Array(stored),
+          header:null
         });
       }
 
@@ -406,94 +406,14 @@ async function restorePlaylist(){
 }
 
 
-function sidText(bytes,start,len){
-  if(!bytes || bytes.length<start+len)return "";
-  let s="";
-  for(let i=start;i<start+len;i++){
-    const c=bytes[i];
-    if(!c)break;
-    s+=String.fromCharCode(c);
-  }
-  return s.replace(/\s+/g," ").trim();
-}
-function metadataFromSidBytes(bytes,fallbackName=""){
-  if(!bytes || bytes.length<118)return {name:fallbackName,author:"UNKNOWN",release:"",year:null,songs:1};
-  const magic=String.fromCharCode(bytes[0],bytes[1],bytes[2],bytes[3]);
-  if(magic!=="PSID" && magic!=="RSID")return {name:fallbackName,author:"UNKNOWN",release:"",year:null,songs:1};
-  const name=sidText(bytes,22,32)||fallbackName;
-  const author=sidText(bytes,54,32)||"UNKNOWN";
-  const release=sidText(bytes,86,32);
-  const ym=release.match(/\b(19\d{2}|20\d{2})\b/);
-  const year=ym?Number(ym[1]):null;
-  const songs=((bytes[14]||0)<<8)|(bytes[15]||1);
-  return {name,author,release,year,songs:Math.max(1,songs||1)};
-}
-function authorLastName(author){
-  const raw=(author||"UNKNOWN").trim();
-  if(!raw)return "UNKNOWN";
-
-  // Prefer "Lastname" in "Lastname, Firstname" form when it contains letters.
-  if(raw.includes(",")){
-    const commaLast=raw.split(",")[0].trim();
-    if(/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(commaLast))return commaLast.toLocaleLowerCase();
-  }
-
-  const clean=raw.replace(/\([^)]*\)/g," ").replace(/\s+/g," ").trim();
-  const parts=clean.split(" ").filter(Boolean);
-
-  // Walk backward until we find a token containing alphabetic characters.
-  // Example: "Rob Hubbard 1986" -> "Hubbard".
-  for(let i=parts.length-1;i>=0;i--){
-    if(/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(parts[i])){
-      return parts[i].toLocaleLowerCase();
-    }
-  }
-
-  return clean.toLocaleLowerCase()||"unknown";
-}
-function queueMeta(q){
-  if(q?.header)return q.header;
-  if(q?.bytes){
-    q.header=metadataFromSidBytes(q.bytes,q?.file?.name||"");
-    return q.header;
-  }
-  return {name:q?.file?.name||"",author:"UNKNOWN",release:"",year:null,songs:1};
-}
-async function preparePlaylistMetadata(){
-  const BATCH=48;
-  for(let base=0;base<queue.length;base+=BATCH){
-    const end=Math.min(queue.length,base+BATCH);
-    await Promise.all(queue.slice(base,end).map(async q=>{
-      const bytes=await ensureBytes(q);
-      if(!q.header)q.header=metadataFromSidBytes(bytes,q.file.name);
-    }));
-    if(end<queue.length)await new Promise(r=>setTimeout(r,0));
-  }
-}
-function sortQueue(mode="title"){
+function sortQueueAlphabetically(){
   const active=(current>=0&&current<queue.length)?queue[current]:null;
-  playlistSortMode=mode;
-  const cmp=(a,b)=>String(a||"").localeCompare(String(b||""),undefined,{numeric:true,sensitivity:"base"});
-  queue.sort((a,b)=>{
-    const ma=queueMeta(a), mb=queueMeta(b);
-    if(mode==="author"){
-      let c=cmp(authorLastName(ma.author),authorLastName(mb.author));
-      if(c)return c;
-      c=cmp(ma.name||a?.file?.name||"",mb.name||b?.file?.name||"");
-      if(c)return c;
-      return cmp(a?.file?.name||"",b?.file?.name||"");
-    }
-    return cmp(a?.file?.name||"",b?.file?.name||"");
-  });
-  if(active)current=queue.indexOf(active);
-  updateSortButtons();
-}
-function sortQueueAlphabetically(){sortQueue("title");}
-function updateSortButtons(){
-  ["title","author"].forEach(m=>{
-    const el=$("sort"+m[0].toUpperCase()+m.slice(1));
-    if(el)el.classList.toggle("active",playlistSortMode===m);
-  });
+  queue.sort((a,b)=>(a?.file?.name||"").localeCompare(
+    b?.file?.name||"",
+    undefined,
+    {numeric:true,sensitivity:"base"}
+  ));
+  if(active) current=queue.indexOf(active);
 }
 
 function saveFavorites(){
@@ -537,32 +457,60 @@ async function deleteSong(i){
   renderList();
   await savePlaylist();
 }
+function searchSidText(bytes,start,len){
+  if(!bytes||bytes.length<start+len)return "";
+  let s="";
+  for(let i=start;i<start+len;i++){
+    const c=bytes[i]; if(!c)break; s+=String.fromCharCode(c);
+  }
+  return s.replace(/\s+/g," ").trim();
+}
+function searchMetadata(q){
+  if(q?.header)return q.header;
+  const bytes=q?.bytes;
+  if(bytes&&bytes.length>=118){
+    const magic=String.fromCharCode(bytes[0],bytes[1],bytes[2],bytes[3]);
+    if(magic==="PSID"||magic==="RSID"){
+      return {name:searchSidText(bytes,22,32)||q?.file?.name||"",author:searchSidText(bytes,54,32)||""};
+    }
+  }
+  return {name:q?.file?.name||"",author:""};
+}
+function normalizeSearchText(s){return String(s||"").toLocaleLowerCase();}
+function playlistSearchMatch(q){
+  const needle=normalizeSearchText(playlistSearchQuery).trim();
+  if(!needle)return true;
+  const meta=searchMetadata(q);
+  return normalizeSearchText(meta?.name||q?.file?.name||"").includes(needle) ||
+         normalizeSearchText(meta?.author||"").includes(needle);
+}
+function updateSearchCount(count){
+  const el=$("playlistSearchCount");
+  if(!el)return;
+  el.textContent=playlistSearchQuery.trim()?(count+" RESULT"+(count===1?"":"S")):"";
+}
+
 function renderList(){
   $("list").innerHTML="";
-  const visible=queue.map((q,i)=>({q,i})).filter(x=>!showFavoritesOnly||isFavorite(x.q));
+  const visible=queue.map((q,i)=>({q,i})).filter(x=>
+    (!showFavoritesOnly||isFavorite(x.q)) && playlistSearchMatch(x.q)
+  );
+  updateSearchCount(visible.length);
   if(!visible.length){
-    $("list").innerHTML='<div class="item"><div class="itemName">'+(showFavoritesOnly?"No favorites yet.":"No tunes loaded.")+'</div></div>';
+    const emptyText=playlistSearchQuery.trim()
+      ?"No matching songs or authors."
+      :(showFavoritesOnly?"No favorites yet.":"No tunes loaded.");
+    $("list").innerHTML='<div class="item"><div class="itemName">'+emptyText+'</div></div>';
     return;
   }
   visible.forEach(({q,i})=>{
     const d=document.createElement("div");
     d.className="item "+(i===current?"current":"");
 
-    const textWrap=document.createElement("div");
-    textWrap.className="itemText";
-
     const name=document.createElement("div");
     name.className="itemName";
-    const meta=queueMeta(q);
-    name.textContent=meta.name||q.file.name;
+    name.textContent=q.file.name;
     name.onclick=()=>loadSong(i,true);
-
-    const metaLine=document.createElement("div");
-    metaLine.className="itemMeta";
-    const author=(meta.author&&meta.author!=="UNKNOWN")?meta.author:"UNKNOWN AUTHOR";
-    const year=meta.year?String(meta.year):"YEAR ?";
-    metaLine.textContent=author+" · "+year;
-    textWrap.append(name,metaLine);
 
     const fav=document.createElement("button");
     fav.className="itemBtn fav "+(isFavorite(q)?"on":"");
@@ -576,7 +524,7 @@ function renderList(){
     del.title="Delete from playlist";
     del.onclick=async e=>{e.stopPropagation();await deleteSong(i);};
 
-    d.append(textWrap,fav,del);
+    d.append(name,fav,del);
     $("list").appendChild(d);
   });
 }
@@ -586,7 +534,6 @@ function updateTrack(){
 }
 async function ensureBytes(q){
   if(!q.bytes)q.bytes=new Uint8Array(await q.file.arrayBuffer());
-  if(!q.header)q.header=metadataFromSidBytes(q.bytes,q.file.name);
   return q.bytes;
 }
 
@@ -603,10 +550,7 @@ function startWorker(){
       await restorePlaylist();
     }else if(m.type==="loaded"){
       const q=queue[current];
-      if(q){
-        const parsedYear=q.header?.year??metadataFromSidBytes(q.bytes,q.file.name).year;
-        q.header={...m.header,year:parsedYear};
-      }
+      if(q)q.header=m.header;
       activeSub=m.sub||0;
       $("title").textContent=m.header.name||queue[current].file.name;
       $("author").textContent="BY "+(m.header.author||"UNKNOWN");
@@ -818,9 +762,23 @@ $("newFiles").onchange=async e=>{
 
 $("showFavs").onclick=()=>{showFavoritesOnly=true;renderList();};
 $("showAll").onclick=()=>{showFavoritesOnly=false;renderList();};
-$("sortTitle").onclick=async()=>{await preparePlaylistMetadata();sortQueue("title");renderList();status("Playlist sorted by title.");};
-$("sortAuthor").onclick=async()=>{await preparePlaylistMetadata();sortQueue("author");renderList();status("Playlist sorted by author surname, then song title.");};
-updateSortButtons();
+$("playlistSearchInput").addEventListener("input",async e=>{
+  playlistSearchQuery=e.target.value||"";
+  if(playlistSearchQuery.trim()){
+    const BATCH=48;
+    for(let base=0;base<queue.length;base+=BATCH){
+      const end=Math.min(queue.length,base+BATCH);
+      await Promise.all(queue.slice(base,end).map(async q=>{try{await ensureBytes(q);}catch(_){}}));
+      if(end<queue.length)await new Promise(r=>setTimeout(r,0));
+    }
+  }
+  renderList();
+});
+$("playlistSearchClear").onclick=()=>{
+  playlistSearchQuery="";
+  $("playlistSearchInput").value="";
+  renderList();
+};
 
 let digiBoost=false;
 function updateSidModelButtons(){
