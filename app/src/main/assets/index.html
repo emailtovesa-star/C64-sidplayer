@@ -125,6 +125,12 @@ button,.load{border:2px solid #7772ec;border-radius:8px;background:#111049;color
 .itemBtn.del{color:#ff9a9a}
 .playlistTools{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
 .playlistTools .load,.playlistTools button{margin-top:0}
+.playlistSortTools{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:7px}
+.playlistSortTools button{min-height:38px;font-size:11px}
+.playlistSortTools button.active{background:#4c469f;border-color:#ffe36c;color:#ffe36c}
+.itemText{min-width:0}
+.itemMeta{margin-top:3px;color:#9ea9df;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 .sidModelPanel{margin-top:10px;background:#09082d;border:1px solid #4e49ae;border-radius:9px;padding:9px}
 .sidModelLabel{text-align:center;color:#ffe36c;font:bold 12px monospace;margin-bottom:7px}
 .sidModelButtons{display:grid;grid-template-columns:1fr 1fr;gap:7px}
@@ -177,6 +183,11 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
   <button id="showFavs">SHOW FAVORITES</button>
   <button id="showAll">SHOW ALL</button>
 </div>
+<div class="playlistSortTools">
+  <button id="sortTitle">SORT TITLE</button>
+  <button id="sortAuthor">SORT AUTHOR</button>
+  <button id="sortYear">SORT YEAR</button>
+</div>
 <div class="list" id="list"><div class="item">No tunes loaded.</div></div>
 <div class="status" id="status">Starting worker + native AudioTrack pipeline…</div>
 <div class="badge">Native Android reSIDfp engine · Background-safe AudioTrack · HVSC exact loop</div>
@@ -195,6 +206,7 @@ let durationSec=null, playStartedAt=0, accumulatedPlaySec=0;
 let audioClockAvailable=false;
 let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false, playlistRestored=false;
 let showFavoritesOnly=false;
+let playlistSortMode="title";
 const FAVORITES_KEY="c64_sid_player_favorites_v1";
 const BW_MODE_KEY="c64_sid_player_bw_mode_v1";
 const SID_MODEL_KEY="c64_sid_player_sid_model_v1";
@@ -366,10 +378,11 @@ async function restorePlaylist(){
           name:it.name,
           arrayBuffer:async()=>stored.slice(0)
         };
+        const restoredBytes=new Uint8Array(stored);
         restored.push({
           file:fileLike,
-          bytes:new Uint8Array(stored),
-          header:null
+          bytes:restoredBytes,
+          header:metadataFromSidBytes(restoredBytes,it.name)
         });
       }
 
@@ -394,14 +407,87 @@ async function restorePlaylist(){
 }
 
 
-function sortQueueAlphabetically(){
+function sidText(bytes,start,len){
+  if(!bytes || bytes.length<start+len)return "";
+  let s="";
+  for(let i=start;i<start+len;i++){
+    const c=bytes[i];
+    if(!c)break;
+    s+=String.fromCharCode(c);
+  }
+  return s.replace(/\s+/g," ").trim();
+}
+function metadataFromSidBytes(bytes,fallbackName=""){
+  if(!bytes || bytes.length<118)return {name:fallbackName,author:"UNKNOWN",release:"",year:null,songs:1};
+  const magic=String.fromCharCode(bytes[0],bytes[1],bytes[2],bytes[3]);
+  if(magic!=="PSID" && magic!=="RSID")return {name:fallbackName,author:"UNKNOWN",release:"",year:null,songs:1};
+  const name=sidText(bytes,22,32)||fallbackName;
+  const author=sidText(bytes,54,32)||"UNKNOWN";
+  const release=sidText(bytes,86,32);
+  const ym=release.match(/\b(19\d{2}|20\d{2})\b/);
+  const year=ym?Number(ym[1]):null;
+  const songs=((bytes[14]||0)<<8)|(bytes[15]||1);
+  return {name,author,release,year,songs:Math.max(1,songs||1)};
+}
+function authorLastName(author){
+  const raw=(author||"UNKNOWN").trim();
+  if(!raw)return "UNKNOWN";
+  if(raw.includes(","))return raw.split(",")[0].trim().toLocaleLowerCase();
+  const clean=raw.replace(/\([^)]*\)/g," ").replace(/\s+/g," ").trim();
+  const parts=clean.split(" ").filter(Boolean);
+  return (parts[parts.length-1]||clean).toLocaleLowerCase();
+}
+function queueMeta(q){
+  if(q?.header)return q.header;
+  if(q?.bytes){
+    q.header=metadataFromSidBytes(q.bytes,q?.file?.name||"");
+    return q.header;
+  }
+  return {name:q?.file?.name||"",author:"UNKNOWN",release:"",year:null,songs:1};
+}
+async function preparePlaylistMetadata(){
+  const BATCH=48;
+  for(let base=0;base<queue.length;base+=BATCH){
+    const end=Math.min(queue.length,base+BATCH);
+    await Promise.all(queue.slice(base,end).map(async q=>{
+      const bytes=await ensureBytes(q);
+      if(!q.header)q.header=metadataFromSidBytes(bytes,q.file.name);
+    }));
+    if(end<queue.length)await new Promise(r=>setTimeout(r,0));
+  }
+}
+function sortQueue(mode="title"){
   const active=(current>=0&&current<queue.length)?queue[current]:null;
-  queue.sort((a,b)=>(a?.file?.name||"").localeCompare(
-    b?.file?.name||"",
-    undefined,
-    {numeric:true,sensitivity:"base"}
-  ));
-  if(active) current=queue.indexOf(active);
+  playlistSortMode=mode;
+  const cmp=(a,b)=>String(a||"").localeCompare(String(b||""),undefined,{numeric:true,sensitivity:"base"});
+  queue.sort((a,b)=>{
+    const ma=queueMeta(a), mb=queueMeta(b);
+    if(mode==="author"){
+      let c=cmp(authorLastName(ma.author),authorLastName(mb.author));
+      if(c)return c;
+      c=cmp(ma.author,mb.author); if(c)return c;
+      const ya=ma.year??9999, yb=mb.year??9999;
+      if(ya!==yb)return ya-yb;
+      return cmp(a?.file?.name||"",b?.file?.name||"");
+    }
+    if(mode==="year"){
+      const ya=ma.year??9999, yb=mb.year??9999;
+      if(ya!==yb)return ya-yb;
+      let c=cmp(authorLastName(ma.author),authorLastName(mb.author));
+      if(c)return c;
+      return cmp(a?.file?.name||"",b?.file?.name||"");
+    }
+    return cmp(a?.file?.name||"",b?.file?.name||"");
+  });
+  if(active)current=queue.indexOf(active);
+  updateSortButtons();
+}
+function sortQueueAlphabetically(){sortQueue("title");}
+function updateSortButtons(){
+  ["title","author","year"].forEach(m=>{
+    const el=$("sort"+m[0].toUpperCase()+m.slice(1));
+    if(el)el.classList.toggle("active",playlistSortMode===m);
+  });
 }
 
 function saveFavorites(){
@@ -456,10 +542,21 @@ function renderList(){
     const d=document.createElement("div");
     d.className="item "+(i===current?"current":"");
 
+    const textWrap=document.createElement("div");
+    textWrap.className="itemText";
+
     const name=document.createElement("div");
     name.className="itemName";
-    name.textContent=q.file.name;
+    const meta=queueMeta(q);
+    name.textContent=meta.name||q.file.name;
     name.onclick=()=>loadSong(i,true);
+
+    const metaLine=document.createElement("div");
+    metaLine.className="itemMeta";
+    const author=(meta.author&&meta.author!=="UNKNOWN")?meta.author:"UNKNOWN AUTHOR";
+    const year=meta.year?String(meta.year):"YEAR ?";
+    metaLine.textContent=author+" · "+year;
+    textWrap.append(name,metaLine);
 
     const fav=document.createElement("button");
     fav.className="itemBtn fav "+(isFavorite(q)?"on":"");
@@ -473,7 +570,7 @@ function renderList(){
     del.title="Delete from playlist";
     del.onclick=async e=>{e.stopPropagation();await deleteSong(i);};
 
-    d.append(name,fav,del);
+    d.append(textWrap,fav,del);
     $("list").appendChild(d);
   });
 }
@@ -483,6 +580,7 @@ function updateTrack(){
 }
 async function ensureBytes(q){
   if(!q.bytes)q.bytes=new Uint8Array(await q.file.arrayBuffer());
+  if(!q.header)q.header=metadataFromSidBytes(q.bytes,q.file.name);
   return q.bytes;
 }
 
@@ -499,7 +597,10 @@ function startWorker(){
       await restorePlaylist();
     }else if(m.type==="loaded"){
       const q=queue[current];
-      if(q)q.header=m.header;
+      if(q){
+        const parsedYear=q.header?.year??metadataFromSidBytes(q.bytes,q.file.name).year;
+        q.header={...m.header,year:parsedYear};
+      }
       activeSub=m.sub||0;
       $("title").textContent=m.header.name||queue[current].file.name;
       $("author").textContent="BY "+(m.header.author||"UNKNOWN");
@@ -711,6 +812,10 @@ $("newFiles").onchange=async e=>{
 
 $("showFavs").onclick=()=>{showFavoritesOnly=true;renderList();};
 $("showAll").onclick=()=>{showFavoritesOnly=false;renderList();};
+$("sortTitle").onclick=async()=>{await preparePlaylistMetadata();sortQueue("title");renderList();status("Playlist sorted by title.");};
+$("sortAuthor").onclick=async()=>{await preparePlaylistMetadata();sortQueue("author");renderList();status("Playlist sorted by author surname, then year.");};
+$("sortYear").onclick=async()=>{await preparePlaylistMetadata();sortQueue("year");renderList();status("Playlist sorted by year, then author surname.");};
+updateSortButtons();
 
 let digiBoost=false;
 function updateSidModelButtons(){
