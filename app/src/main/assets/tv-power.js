@@ -146,7 +146,7 @@
         border-radius:15% 13% 12% 12%;
         background:
           linear-gradient(135deg,#8a5f35 0,#4b2d18 33%,#79502e 62%,#382014 100%);
-        border:4px solid #5a3218;
+        border:4px solid #2b160b;
         box-shadow:
           inset 0 0 0 3px #c6925a,
           inset 0 3px 0 #e0b07888,
