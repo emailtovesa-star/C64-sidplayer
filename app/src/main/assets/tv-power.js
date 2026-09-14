@@ -355,6 +355,12 @@
     screen.appendChild(stage);
     screen.appendChild(button);
 
+    // Stop retro-TV clicks from reaching the parent song-info screen.
+    // This prevents TV/cabinet/background touches from toggling infoWhite.
+    stage.addEventListener("click", e => {
+      e.stopPropagation();
+    });
+
     // Touch the actual retro TV glass to start the embedded GIF.
     // The src is assigned only on first touch, avoiding GIF decode work at app startup.
     const retroTvTouchScreen = stage.querySelector("#retroTvTouchScreen");
