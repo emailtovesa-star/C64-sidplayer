@@ -146,9 +146,9 @@
         border-radius:15% 13% 12% 12%;
         background:
           linear-gradient(135deg,#8a5f35 0,#4b2d18 33%,#79502e 62%,#382014 100%);
-        border:4px solid #21140e;
+        border:4px solid #000;
         box-shadow:
-          inset 0 0 0 3px #a77a4c,
+          inset 0 0 0 3px #000,
           inset 0 -16px 22px #1c100b99,
           0 13px 20px #000b;
       }
@@ -176,7 +176,7 @@
         height:72%;
         overflow:hidden;
         border-radius:20% / 16%;
-        border:5px solid #211b18;
+        border:5px solid #000;
         background:
           radial-gradient(ellipse at 48% 44%,#292d2f 0,#111617 55%,#030505 100%);
         box-shadow:
