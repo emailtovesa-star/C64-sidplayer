@@ -203,6 +203,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 <script type="module">
 let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, loopOne=false;
 let durationSec=null, playStartedAt=0, accumulatedPlaySec=0;
+let restartOnNextPlay=false;
 let audioClockAvailable=false;
 let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false, playlistRestored=false;
 let showFavoritesOnly=false;
@@ -593,6 +594,7 @@ startWorker();
 
 async function loadSong(i,autoplay=false,subOverride=null){
   if(i<0||i>=queue.length||!workerReady)return;
+  restartOnNextPlay=false;
   pauseInternal(true);
   pcmGeneration++;
   android("resetAudioOutput");
@@ -614,9 +616,16 @@ async function loadSong(i,autoplay=false,subOverride=null){
     setTimeout(()=>play(),120);
   }
 }
-function play(){
+async function play(){
   if(current<0){if(queue.length)loadSong(0,true);return}
   if(!workerReady)return;
+  if(restartOnNextPlay){
+    restartOnNextPlay=false;
+    accumulatedPlaySec=0;
+    playStartedAt=0;
+    await loadSong(current,true,activeSub);
+    return;
+  }
   android("startPlaybackService");
   if(nativeAndroid) android("nativePlay"); else android("resumeAudioOutput");
   if(!playing) playStartedAt=performance.now();
@@ -639,6 +648,7 @@ function stop(){
   pauseInternal(true);
   if(worker)worker.postMessage({type:"stop"});
   android("stopPlaybackService");
+  restartOnNextPlay=(current>=0);
   status("Stopped");
 }
 async function changeSub(delta){
@@ -825,6 +835,9 @@ $("pause").onclick=pause;
 $("stop").onclick=stop;
 $("restart").onclick=()=>{
   if(current<0)return;
+  restartOnNextPlay=false;
+  accumulatedPlaySec=0;
+  playStartedAt=performance.now();
   if(nativeAndroid){ android("nativeRestart"); playing=true; status("Restarted native SID."); }
   else loadSong(current,true,activeSub);
 };
@@ -888,6 +901,7 @@ function updatePlaytime(){
         playing=false;
         accumulatedPlaySec=durationSec;
         playStartedAt=0;
+        restartOnNextPlay=true;
         status("Song finished");
       }
     }
