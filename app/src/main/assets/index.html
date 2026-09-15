@@ -653,7 +653,7 @@ async function loadSong(i,autoplay=false,subOverride=null){
   const q=queue[i], bytes=await ensureBytes(q);
   currentBytes=bytes;
   if(needsBasicRoms(bytes) && (!c64Roms.basic || !c64Roms.kernal)){
-    playbackLoadError="This BASIC SID requires C64 BASIC and KERNAL ROMs. Import both under C64 ROMs below.";
+    playbackLoadError="This BASIC SID requires C64 BASIC and KERNAL ROMs. Import both under C64 ROMs.";
     $("romPanel").open=true;status(playbackLoadError);renderList();return;
   }
   const count=Math.max(1,(bytes[14]<<8)|bytes[15]);
