@@ -55,7 +55,9 @@ public class PlaybackService extends Service {
             s.playing=false;
             try { if(s.audioTrack!=null){s.audioTrack.pause();s.audioTrack.flush();} } catch(Throwable ignored){}
             boolean ok;
-            try { ok=NativeSid.nativeLoad(data,subsong); } catch(Throwable t){ ok=false; }
+            // Keep WebView/worker source bytes intact for canonical HVSC lookup.
+            // Native restarts reuse this playback copy, including its init fix.
+            try { ok=NativeSid.nativeLoad(SidCompatibility.forPlayback(data),subsong); } catch(Throwable t){ ok=false; }
             s.sidLoaded=ok;
             s.renderedFrames=0;
             s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;

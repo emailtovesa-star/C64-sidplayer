@@ -15,6 +15,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Check SID compatibility guards
+        run: |
+          mkdir -p /tmp/sid-compat-tests
+          javac -d /tmp/sid-compat-tests app/src/main/java/com/example/c64sidplayersimple/SidCompatibility.java tests/SidCompatibilityTest.java
+          java -cp /tmp/sid-compat-tests SidCompatibilityTest
+
       # ubuntu-latest already includes the Android SDK.
       # Do NOT use android-actions/setup-android@v3 here:
       # it currently tries to install the obsolete package "tools".
