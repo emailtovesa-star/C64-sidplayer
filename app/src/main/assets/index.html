@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.24</title>
+<title>C64 SID Player V4.0.25</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -152,7 +152,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 <div class="logoZone" aria-label="C64 SID Player">
   <div id="starField" class="starField" aria-hidden="true"></div>
   <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
-  <div class="sub">V4.0.24</div>
+  <div class="sub">V4.0.25</div>
 </div>
 <div class="panel">
 <div class="screen" id="songInfoScreen">
@@ -177,6 +177,14 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
   </div>
   <div class="sidModelHint">reSIDfp chip model + model-specific filter</div><div id="digiBoostRow" style="display:none;margin-top:8px"><button id="digiBoost" class="sidModelBtn" style="width:100%">DIGIBOOST: OFF</button><div class="sidModelHint">8580 only · louder digi/sample playback</div></div>
 </div>
+<details class="sidModelPanel" id="romPanel">
+  <summary>C64 ROMs · BASIC tune support</summary>
+  <p class="sidModelHint">Import your C64 BASIC and KERNAL ROM files (8 KB each). Saved on this device.</p>
+  <label>BASIC ROM <input id="basicRomFile" type="file"></label><br>
+  <label>KERNAL ROM <input id="kernalRomFile" type="file"></label>
+  <div id="romState" class="sidModelHint"></div>
+  <button id="clearRoms" type="button">REMOVE ROMS</button>
+</details>
 <div class="playlistTools">
   <label class="load">ADD .SID FILES<input id="files" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream"></label>
   <label class="load">NEW PLAYLIST<input id="newFiles" type="file" multiple accept=".sid,audio/prs.sid,audio/x-sid,application/octet-stream"></label>
@@ -215,6 +223,44 @@ let sidModel=(localStorage.getItem(SID_MODEL_KEY)==="8580")?8580:6581;
 let favoriteNames=new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY)||"[]"));
 const $=id=>document.getElementById(id), status=s=>$("status").textContent=s;
 const nativeAndroid=!!(window.AndroidPlayer&&typeof window.AndroidPlayer.nativeLoadSid==="function");
+let playbackLoadError="", playbackReady=false;
+const c64Roms={basic:null,kernal:null};
+function decodeRom(text){
+  if(!text)return null;
+  try{const a=Uint8Array.from(atob(text),c=>c.charCodeAt(0));return a.length===8192?a:null;}catch(_){return null;}
+}
+for(const kind of ["basic","kernal"]){
+  try{c64Roms[kind]=decodeRom(localStorage.getItem("c64-rom-"+kind));}catch(_){}
+}
+function updateRomState(){
+  $("romState").textContent="BASIC: "+(c64Roms.basic?"loaded":"missing")+" · KERNAL: "+(c64Roms.kernal?"loaded":"missing");
+}
+function applyRoms(){
+  if(nativeAndroid && android("nativeSetRoms",c64Roms.kernal?toBase64(c64Roms.kernal.buffer):"",c64Roms.basic?toBase64(c64Roms.basic.buffer):"")!==true)
+    throw new Error("Could not configure C64 ROMs.");
+  if(workerReady)worker.postMessage({type:"roms",basic:c64Roms.basic,kernal:c64Roms.kernal,chargen:null});
+  updateRomState();
+}
+function needsBasicRoms(bytes){
+  return bytes.length>=124 && bytes[0]===82 && bytes[1]===83 && bytes[2]===73 && bytes[3]===68 && (bytes[119]&2)!==0;
+}
+async function changeRoms(kind,file){
+  try{
+    const bytes=file?new Uint8Array(await file.arrayBuffer()):null;
+    if(bytes && bytes.length!==8192)throw new Error("Select an 8192-byte C64 "+kind.toUpperCase()+" ROM file.");
+    pauseInternal(true);playbackReady=false;
+    if(kind){c64Roms[kind]=bytes;}else{c64Roms.basic=null;c64Roms.kernal=null;}
+    applyRoms();
+    let saved=true;
+    try{for(const key of ["basic","kernal"]){if(c64Roms[key])localStorage.setItem("c64-rom-"+key,toBase64(c64Roms[key].buffer));else localStorage.removeItem("c64-rom-"+key);}}catch(_){saved=false;}
+    if(current>=0)await loadSong(current,false,activeSub);
+    if(!saved)status("ROMs loaded for this session; device storage is unavailable.");
+  }catch(e){status(String(e.message||e));}
+}
+for(const kind of ["basic","kernal"]){$(kind+"RomFile").onchange=e=>{const file=e.target.files[0];if(file)changeRoms(kind,file);e.target.value="";};}
+$("clearRoms").onclick=()=>changeRoms(null,null);
+updateRomState();
+
 const toBase64=(buf)=>{
   const bytes=new Uint8Array(buf); let out=""; const CHUNK=0x8000;
   for(let i=0;i<bytes.length;i+=CHUNK) out+=String.fromCharCode(...bytes.subarray(i,i+CHUNK));
@@ -546,6 +592,7 @@ function startWorker(){
       status(m.entries ? "HVSC database loaded: "+m.entries+" tunes." : "HVSC database failed to load.");
     }else if(m.type==="ready"){
       workerReady=true;
+      try{applyRoms();}catch(e){status(e.message);return;}
       $("engine").textContent=nativeAndroid?"ENGINE: reSIDfp · NATIVE ANDROID":"ENGINE: "+m.engine+" · WORKER";
       status("reSIDfp worker ready. Native AudioTrack ready.");
       await restorePlaylist();
@@ -558,7 +605,8 @@ function startWorker(){
       $("release").textContent=m.header.release||"RELEASE INFO UNKNOWN";
       updateTrack(); renderList();
       updateAndroidNowPlaying();
-      status("");
+      if(!nativeAndroid)playbackReady=true;
+      status(playbackLoadError);
     }else if(m.type==="duration"){
       const sec=Number(m.seconds);
       durationSec=(Number.isFinite(sec)&&sec>0)?sec:null;
@@ -585,6 +633,7 @@ function startWorker(){
         android("enqueuePcm", b64);
       }
     }else if(m.type==="error"){
+      if(!nativeAndroid){playbackReady=false;playbackLoadError="ENGINE ERROR: "+m.message;}
       status("ENGINE ERROR: "+m.message);
     }
   };
@@ -595,21 +644,32 @@ startWorker();
 async function loadSong(i,autoplay=false,subOverride=null){
   if(i<0||i>=queue.length||!workerReady)return;
   restartOnNextPlay=false;
+  playbackReady=false;playbackLoadError="";
   pauseInternal(true);
+  if(nativeAndroid)android("nativeUnloadSid");
   pcmGeneration++;
   android("resetAudioOutput");
   current=i;
   const q=queue[i], bytes=await ensureBytes(q);
   currentBytes=bytes;
+  if(needsBasicRoms(bytes) && (!c64Roms.basic || !c64Roms.kernal)){
+    playbackLoadError="This BASIC SID requires C64 BASIC and KERNAL ROMs. Import both under C64 ROMs below.";
+    $("romPanel").open=true;status(playbackLoadError);renderList();return;
+  }
+  const count=Math.max(1,(bytes[14]<<8)|bytes[15]);
+  const requested=subOverride==null?(((bytes[16]<<8)|bytes[17])||1)-1:subOverride;
+  const selectedSub=Math.max(0,Math.min(count-1,requested));
+  activeSub=selectedSub;
   if(nativeAndroid){
     android("startPlaybackService");
     const sidB64=toBase64(bytes.buffer);
-    const nativeOk=android("nativeLoadSid",sidB64,subOverride==null?0:subOverride);
-    if(nativeOk===false) status("Native reSIDfp load failed.");
+    const nativeOk=android("nativeLoadSid",sidB64,selectedSub);
+    if(nativeOk!==true){playbackLoadError="Native reSIDfp load failed. This tune may require C64 ROMs.";status(playbackLoadError);return;}
+    playbackReady=true;
   }
   android("clearPcm");
   const copy=bytes.slice();
-  worker.postMessage({type:"load",buffer:copy.buffer,song:subOverride,pcmGeneration},[copy.buffer]);
+  worker.postMessage({type:"load",buffer:copy.buffer,song:selectedSub,pcmGeneration},[copy.buffer]);
   renderList();
   if(autoplay){
     // Give the worker a moment to complete load before starting.
@@ -619,6 +679,7 @@ async function loadSong(i,autoplay=false,subOverride=null){
 async function play(){
   if(current<0){if(queue.length)loadSong(0,true);return}
   if(!workerReady)return;
+  if(!playbackReady){status(playbackLoadError||"Loading SID…");return;}
   if(restartOnNextPlay){
     restartOnNextPlay=false;
     accumulatedPlaySec=0;
@@ -835,6 +896,7 @@ $("pause").onclick=pause;
 $("stop").onclick=stop;
 $("restart").onclick=()=>{
   if(current<0)return;
+  if(!playbackReady){status(playbackLoadError||"Loading SID…");return;}
   restartOnNextPlay=false;
   accumulatedPlaySec=0;
   playStartedAt=performance.now();

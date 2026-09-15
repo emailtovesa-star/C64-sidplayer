@@ -175,9 +175,9 @@ self.onmessage=async e=>{
     }
 
     if(m.type==="roms"){
-      if(m.kernal)roms.kernal=new Uint8Array(m.kernal);
-      if(m.basic)roms.basic=new Uint8Array(m.basic);
-      if(m.chargen)roms.chargen=new Uint8Array(m.chargen);
+      if(m.kernal!==undefined)roms.kernal=m.kernal?new Uint8Array(m.kernal):null;
+      if(m.basic!==undefined)roms.basic=m.basic?new Uint8Array(m.basic):null;
+      if(m.chargen!==undefined)roms.chargen=m.chargen?new Uint8Array(m.chargen):null;
       return;
     }
   }catch(err){

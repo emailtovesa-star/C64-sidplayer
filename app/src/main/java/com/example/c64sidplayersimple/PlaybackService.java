@@ -47,6 +47,19 @@ public class PlaybackService extends Service {
         try{ MainActivity.dispatchMediaCommand(cmd); }catch(Throwable ignored){}
     }
 
+    public static void unloadSid() {
+        synchronized(lock) {
+            PlaybackService s=instance;
+            if(s!=null){
+                s.generation.incrementAndGet();s.playing=false;s.sidLoaded=false;
+                try{if(s.audioTrack!=null){s.audioTrack.pause();s.audioTrack.flush();}}catch(Throwable ignored){}
+                s.renderedFrames=0;s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
+                s.updateNotification();
+            }
+            try{NativeSid.nativeUnload();}catch(Throwable ignored){}
+        }
+    }
+
     public static boolean loadSid(byte[] data,int subsong) {
         PlaybackService s=instance;
         if(s==null||data==null)return false;

@@ -10,7 +10,7 @@ public final class SidCompatibilityTest {
 
     public static void main(String[] args) throws Exception {
         check(SidCompatibility.forPlayback(null) == null, "null input");
-        for (int size : new int[]{0, 123, 2990, 3468, 65536}) {
+        for (int size : new int[]{0, 123, 2990, 3468, 3023, 4201, 9360, 65536}) {
             byte[] unknown = new byte[size];
             check(SidCompatibility.forPlayback(unknown) == unknown, "unrecognized input changed");
         }

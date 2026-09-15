@@ -7,6 +7,7 @@ public final class NativeSid {
     private NativeSid() {}
 
     public static native boolean nativeLoad(byte[] sidBytes, int subsong);
+    public static native boolean nativeSetRoms(byte[] kernal, byte[] basic);
     public static native boolean nativeRestart();
     public static native boolean nativeSetSidModel(int model);
     public static native short[] nativeRender(int frames);

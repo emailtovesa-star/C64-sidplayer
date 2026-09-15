@@ -31,3 +31,27 @@ To test actual files, append pairs of paths to an original SID and its
 independently verified patched copy. The test checks byte-for-byte equivalence,
 preservation of the original, repeat application, and rejection of altered
 revisions. These fixture pairs were checked locally before this change.
+
+
+## V4.0.25
+
+- Namnam Special: the verified 3023-byte original receives the same X=0 init
+  wrapper. Tested in the bundled WASM engine.
+- Street Cred Boxing: the verified 4201-byte original receives three trailing
+  zero bytes in the playback copy. Both subtunes produce sustained audio in
+  the bundled engine; a one-byte extension does not fix it. The original music
+  code and init address are unchanged. This is a targeted compatibility repair
+  for the supplied rip, not a claim that every revision needs padding.
+- Default subtune selection now uses the file header consistently in native and
+  metadata playback. Street Cred Boxing defaults to subtune 2.
+- BASIC RSID files prompt for missing BASIC/KERNAL ROMs instead of appearing to
+  play silently. The C64 ROMs panel imports 8192-byte images, stores them locally,
+  and supplies them to native libsidplayfp and the metadata worker. ROMs can be
+  removed. Size validation cannot establish whether a ROM contains valid code.
+- Chess Offenbach BASIC is such an RSID. No ROMs are bundled. Playback of this
+  tune with user-supplied ROMs still requires on-device validation.
+
+Tests verified the two new playback patches against independent test copies,
+retained both older fixes, confirmed both Street Cred Boxing subtunes render
+music, and exercised missing-ROM blocking, default-subtune selection, invalid
+ROM sizes, preservation of original metadata bytes, and native-load failure.

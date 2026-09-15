@@ -15,6 +15,7 @@ static std::unique_ptr<sidplayfp> gPlayer;
 static std::unique_ptr<ReSIDfpBuilder> gBuilder;
 static std::unique_ptr<SidTune> gTune;
 static std::vector<uint8_t> gSidBytes;
+static std::vector<uint8_t> gKernalRom, gBasicRom;
 static int gSubsong=0;
 static int gSidModel=6581;
 static bool gDigiBoost=false;
@@ -23,6 +24,7 @@ static bool rebuildLocked(){
  try{
   gTune.reset();gPlayer.reset();gBuilder.reset();
   gPlayer=std::make_unique<sidplayfp>();
+  gPlayer->setRoms(gKernalRom.empty()?nullptr:gKernalRom.data(),gBasicRom.empty()?nullptr:gBasicRom.data(),nullptr);
   gBuilder=std::make_unique<ReSIDfpBuilder>("reSIDfp Android");
   gBuilder->create(gPlayer->info().maxsids());if(!gBuilder->getStatus())return false;
   gTune=std::make_unique<SidTune>(gSidBytes.data(),(uint_least32_t)gSidBytes.size());if(!gTune->getStatus())return false;
@@ -38,6 +40,18 @@ static bool rebuildLocked(){
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_c64sidplayersimple_NativeSid_nativeLoad(JNIEnv*e,jclass,jbyteArray d,jint s){
  if(!d)return JNI_FALSE;jsize n=e->GetArrayLength(d);if(n<=0)return JNI_FALSE;std::vector<uint8_t>b((size_t)n);e->GetByteArrayRegion(d,0,n,reinterpret_cast<jbyte*>(b.data()));
  std::lock_guard<std::mutex>l(gMutex);gSidBytes=std::move(b);gSubsong=(int)s;return rebuildLocked()?JNI_TRUE:JNI_FALSE;}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_c64sidplayersimple_NativeSid_nativeSetRoms(JNIEnv*e,jclass,jbyteArray k,jbyteArray b){
+ if(!k||!b)return JNI_FALSE;
+ const jsize kn=e->GetArrayLength(k),bn=e->GetArrayLength(b);
+ if((kn!=0&&kn!=8192)||(bn!=0&&bn!=8192))return JNI_FALSE;
+ std::vector<uint8_t>kr((size_t)kn),br((size_t)bn);
+ if(kn)e->GetByteArrayRegion(k,0,kn,reinterpret_cast<jbyte*>(kr.data()));
+ if(bn)e->GetByteArrayRegion(b,0,bn,reinterpret_cast<jbyte*>(br.data()));
+ if(e->ExceptionCheck())return JNI_FALSE;
+ std::lock_guard<std::mutex>l(gMutex);
+ // Stop the old engine before replacing the ROM storage it may reference.
+ gTune.reset();gPlayer.reset();gBuilder.reset();gSidBytes.clear();
+ gKernalRom=std::move(kr);gBasicRom=std::move(br);return JNI_TRUE;}
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_c64sidplayersimple_NativeSid_nativeRestart(JNIEnv*,jclass){std::lock_guard<std::mutex>l(gMutex);return rebuildLocked()?JNI_TRUE:JNI_FALSE;}
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_c64sidplayersimple_NativeSid_nativeSetSidModel(JNIEnv*,jclass,jint model){
  std::lock_guard<std::mutex>l(gMutex);int wanted=(model==8580)?8580:6581;

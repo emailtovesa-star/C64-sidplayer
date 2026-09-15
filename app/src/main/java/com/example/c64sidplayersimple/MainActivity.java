@@ -76,7 +76,7 @@ public class MainActivity extends Activity {
                 web.evaluateJavascript("window.onNativeFilePickerOpening&&window.onNativeFilePickerOpening()", null);
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*");
-                i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode()==FileChooserParams.MODE_OPEN_MULTIPLE);
                 startActivityForResult(i, PICK); return true;
             }
         });
@@ -97,6 +97,15 @@ public class MainActivity extends Activity {
                 return PlaybackService.loadSid(data,subsong);
             } catch(Throwable t){ return false; }
         }
+        @JavascriptInterface public boolean nativeSetRoms(String kernal, String basic) {
+            try {
+                byte[] k=android.util.Base64.decode(kernal,android.util.Base64.NO_WRAP);
+                byte[] b=android.util.Base64.decode(basic,android.util.Base64.NO_WRAP);
+                PlaybackService.unloadSid();
+                return NativeSid.nativeSetRoms(k,b);
+            } catch(Throwable t){ return false; }
+        }
+        @JavascriptInterface public void nativeUnloadSid() { PlaybackService.unloadSid(); }
         @JavascriptInterface public void nativePlay() { PlaybackService.playNative(); }
         @JavascriptInterface public void nativePause() { PlaybackService.pauseNative(); }
         @JavascriptInterface public void nativeRestart() { PlaybackService.restartNative(); }

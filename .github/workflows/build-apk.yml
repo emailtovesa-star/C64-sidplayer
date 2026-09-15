@@ -20,6 +20,7 @@ jobs:
           mkdir -p /tmp/sid-compat-tests
           javac -d /tmp/sid-compat-tests app/src/main/java/com/example/c64sidplayersimple/SidCompatibility.java tests/SidCompatibilityTest.java
           java -cp /tmp/sid-compat-tests SidCompatibilityTest
+          node tests/sid-loader.test.cjs
 
       # ubuntu-latest already includes the Android SDK.
       # Do NOT use android-actions/setup-android@v3 here:
