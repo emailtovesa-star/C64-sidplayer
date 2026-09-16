@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "V4.0.28";
+  const VERSION = "V4.0.29";
 
   function injectStyles() {
     if (document.getElementById("tvPowerStyles")) return;
@@ -200,8 +200,8 @@
         position:absolute;
         left:50%;
         top:50%;
-        width:66.666%;
-        height:66.666%;
+        width:100%;
+        height:100%;
         transform:translate(-50%,-50%);
         object-fit:contain;
         display:none;
@@ -332,7 +332,7 @@
 
   function updateVersion() {
     const title = document.querySelector("title");
-    if (title) title.textContent = "C64 SID Player V4.0.28";
+    if (title) title.textContent = "C64 SID Player V4.0.29";
     const sub = document.querySelector(".sub");
     if (sub) sub.textContent = VERSION;
   }

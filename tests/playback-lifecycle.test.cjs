@@ -29,7 +29,8 @@ assert.match(service, /synchronized\(lock\)\{[\s\S]*?pcm=NativeSid\.nativeRender
 for (const [name, source] of [["service", service], ["bridge", bridge], ["TV", tv]]) {
   assert.doesNotMatch(source, /visualizer|equalizer/i, `${name} must not contain equalizer code`);
 }
-assert.match(tv, /width:66\.666%/, "striped TV app icon must cover two-thirds of the picture");
+assert.match(tv, /width:100%/, "striped TV app icon must be 50 percent larger than two-thirds size");
+assert.match(tv, /height:100%/, "striped TV app icon must fill the picture height");
 assert.match(tv, /classList\.add\("gifPlaying","stripesPlaying"\)/,
   "the app icon must appear only over the animated stripes screen");
 
