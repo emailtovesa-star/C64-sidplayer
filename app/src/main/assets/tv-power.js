@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "V4.0.26";
+  const VERSION = "V4.0.27";
 
   function injectStyles() {
     if (document.getElementById("tvPowerStyles")) return;
@@ -196,20 +196,6 @@
         pointer-events:none;
       }
       .tvGlass.gifPlaying .tvGifAnimation{display:block}
-      .tvEqualizer{
-        position:absolute;
-        inset:0;
-        width:100%;
-        height:100%;
-        display:none;
-        z-index:2;
-        border-radius:inherit;
-        pointer-events:none;
-      }
-      .tvGlass.equalizerPlaying .tvEqualizer{display:block}
-      .tvGlass.equalizerPlaying .tvOffDot{display:none}
-      .tvGlass.equalizerPlaying::before{z-index:3;opacity:.10}
-      .tvGlass.equalizerPlaying::after{z-index:4}
       .tvGlass.gifPlaying .tvOffDot{display:none}
       .tvGlass.gifPlaying::before{z-index:3;opacity:.10}
       .tvGlass.gifPlaying::after{z-index:4}
@@ -329,7 +315,7 @@
 
   function updateVersion() {
     const title = document.querySelector("title");
-    if (title) title.textContent = "C64 SID Player V4.0.26";
+    if (title) title.textContent = "C64 SID Player V4.0.27";
     const sub = document.querySelector(".sub");
     if (sub) sub.textContent = VERSION;
   }
@@ -356,7 +342,7 @@
       <div class="vintageTv">
         <div class="tvAntenna"></div>
         <div class="tvCabinet">
-          <div class="tvGlass" id="retroTvTouchScreen"><div class="tvOffDot"></div><img class="tvGifAnimation" id="retroTvGif" alt="" draggable="false"><canvas class="tvEqualizer" id="retroTvEqualizer" aria-label="Three-channel SID equalizer"></canvas></div>
+          <div class="tvGlass" id="retroTvTouchScreen"><div class="tvOffDot"></div><img class="tvGifAnimation" id="retroTvGif" alt="" draggable="false"></div>
           <div class="tvControlsOld">
             <div class="tvKnob one"></div>
             <div class="tvKnob two"></div>
@@ -380,63 +366,14 @@
     // The src is assigned only on first touch, avoiding GIF decode work at app startup.
     const retroTvTouchScreen = stage.querySelector("#retroTvTouchScreen");
     const retroTvGif = stage.querySelector("#retroTvGif");
-    const retroTvEqualizer = stage.querySelector("#retroTvEqualizer");
-    let equalizerFrame = 0;
-    let equalizerLevels = [0,0,0];
-    let retroTvDisplayMode = 0; // 0=original TV, 1=C64 screen, 2=stripes, 3=SID equalizer
-
-    function readVisualizerLevels() {
-      try {
-        const packed = Number(window.AndroidPlayer?.nativeVisualizerLevels?.()) >>> 0;
-        return [packed&1023,(packed>>>10)&1023,(packed>>>20)&1023];
-      } catch (_) { return [0,0,0]; }
-    }
-
-    function drawEqualizer() {
-      if (!retroTvEqualizer || retroTvDisplayMode !== 3) { equalizerFrame=0; return; }
-      const rect=retroTvEqualizer.getBoundingClientRect();
-      const dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));
-      const width=Math.max(1,Math.round(rect.width*dpr));
-      const height=Math.max(1,Math.round(rect.height*dpr));
-      if(retroTvEqualizer.width!==width||retroTvEqualizer.height!==height){retroTvEqualizer.width=width;retroTvEqualizer.height=height;}
-      const ctx=retroTvEqualizer.getContext("2d");
-      ctx.setTransform(dpr,0,0,dpr,0,0);
-      const w=rect.width,h=rect.height;
-      ctx.fillStyle="#020716";ctx.fillRect(0,0,w,h);
-      const target=readVisualizerLevels();
-      for(let i=0;i<3;i++)equalizerLevels[i]+=(target[i]-equalizerLevels[i])*(target[i]>equalizerLevels[i]?.42:.16);
-      const colors=["#69edff","#ff70c7","#65ff72"];
-      const labels=["SID 1","SID 2","SID 3"];
-      const segments=12,gap=2;
-      const side=w*.12,column=(w-side*2)/3,barW=column*.50;
-      const top=h*.15,bottom=h*.23,usable=h-top-bottom;
-      ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`bold ${Math.max(7,h*.075)}px monospace`;
-      for(let c=0;c<3;c++){
-        const x=side+c*column+(column-barW)/2;
-        const lit=Math.round((equalizerLevels[c]/1000)*segments);
-        for(let s=0;s<segments;s++){
-          const segH=(usable-gap*(segments-1))/segments;
-          const y=top+(segments-1-s)*(segH+gap);
-          ctx.globalAlpha=s<lit?(.62+.38*(s+1)/segments):.10;
-          ctx.fillStyle=colors[c];ctx.fillRect(x,y,barW,segH);
-          if(s<lit){ctx.globalAlpha=.18;ctx.shadowColor=colors[c];ctx.shadowBlur=8;ctx.fillRect(x,y,barW,segH);ctx.shadowBlur=0;}
-        }
-        ctx.globalAlpha=1;ctx.fillStyle=colors[c];ctx.fillText(labels[c],x+barW/2,h-bottom*.43);
-      }
-      ctx.globalAlpha=.55;ctx.fillStyle="#c8e9ff";ctx.font=`bold ${Math.max(6,h*.055)}px monospace`;ctx.fillText("LIVE SID LEVELS",w/2,h*.075);
-      ctx.globalAlpha=1;
-      equalizerFrame=requestAnimationFrame(drawEqualizer);
-    }
-
-    function stopEqualizer(){if(equalizerFrame)cancelAnimationFrame(equalizerFrame);equalizerFrame=0;equalizerLevels=[0,0,0];}
+    let retroTvDisplayMode = 0; // 0=original TV, 1=C64 screen, 2=stripes
     if (retroTvTouchScreen && retroTvGif) {
       retroTvTouchScreen.addEventListener("click", e => {
         e.preventDefault();
         e.stopPropagation();
 
-        retroTvDisplayMode = (retroTvDisplayMode + 1) % 4;
-        stopEqualizer();
-        retroTvTouchScreen.classList.remove("gifPlaying","equalizerPlaying");
+        retroTvDisplayMode = (retroTvDisplayMode + 1) % 3;
+        retroTvTouchScreen.classList.remove("gifPlaying");
         retroTvGif.removeAttribute("src");
 
         if (retroTvDisplayMode === 0) {
@@ -449,10 +386,6 @@
           // Shortened stripes / MP4-derived animation.
           retroTvGif.src = "retro-tv-animation.gif";
           retroTvTouchScreen.classList.add("gifPlaying");
-        } else {
-          // Live three-band display representing the three SID music channels.
-          retroTvTouchScreen.classList.add("equalizerPlaying");
-          equalizerFrame=requestAnimationFrame(drawEqualizer);
         }
       });
     }
@@ -482,7 +415,6 @@
         void flash.offsetWidth;
         flash.classList.add("run");
       } else {
-        stopEqualizer();
         stage.classList.remove("show");
         stage.setAttribute("aria-hidden", "true");
         for (const el of infoElements) el.classList.remove("songInfoHidden");

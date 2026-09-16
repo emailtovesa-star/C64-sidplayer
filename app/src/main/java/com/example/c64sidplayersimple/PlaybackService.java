@@ -29,9 +29,6 @@ public class PlaybackService extends Service {
     private volatile long loopLengthMs=0;
     private volatile long renderedFrames=0;
     private volatile long playedBaseFrames=0;
-    private volatile int visualizerPacked=0;
-    private double visualizerLowPass=0,visualizerMidPass=0;
-    private double visualizerLow=0,visualizerMid=0,visualizerHigh=0;
 
     private volatile String songTitle="C64 SID Player";
     private volatile String composer="UNKNOWN";
@@ -57,7 +54,6 @@ public class PlaybackService extends Service {
                 s.generation.incrementAndGet();s.playing=false;s.sidLoaded=false;
                 try{if(s.audioTrack!=null){s.audioTrack.pause();s.audioTrack.flush();}}catch(Throwable ignored){}
                 s.renderedFrames=0;s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
-                s.resetVisualizer();
                 s.updateNotification();
             }
             try{NativeSid.nativeUnload();}catch(Throwable ignored){}
@@ -77,7 +73,6 @@ public class PlaybackService extends Service {
             try { ok=NativeSid.nativeLoad(SidCompatibility.forPlayback(data),subsong); } catch(Throwable t){ ok=false; }
             s.sidLoaded=ok;
             s.renderedFrames=0;
-            s.resetVisualizer();
             s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
             s.updateNotification();
             return ok;
@@ -98,7 +93,6 @@ public class PlaybackService extends Service {
         PlaybackService s=instance;if(s==null)return;
         synchronized(lock){
             s.playing=false;
-            s.resetVisualizer();
             try{if(s.audioTrack!=null)s.audioTrack.pause();}catch(Throwable ignored){}
             s.updateNotification();
         }
@@ -112,7 +106,6 @@ public class PlaybackService extends Service {
             try{if(s.audioTrack!=null){s.audioTrack.pause();s.audioTrack.flush();}}catch(Throwable ignored){}
             try{NativeSid.nativeRestart();}catch(Throwable ignored){}
             s.renderedFrames=0;
-            s.resetVisualizer();
             s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
             s.playing=true;
             try{if(s.audioTrack!=null)s.audioTrack.play();}catch(Throwable ignored){}
@@ -141,7 +134,6 @@ public class PlaybackService extends Service {
             if(ok && s.sidLoaded){
                 try{ok=NativeSid.nativeRestart();}catch(Throwable t){ok=false;}
                 s.renderedFrames=0;
-                s.resetVisualizer();
                 s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
             }
 
@@ -189,50 +181,6 @@ public class PlaybackService extends Service {
     }
 
     public static int getBufferedMs(){return 0;}
-
-    /** Three live 0..1000 levels packed into 10 bits each for the TV display. */
-    public static int getVisualizerLevels(){
-        PlaybackService s=instance;
-        return s==null?0:s.visualizerPacked;
-    }
-
-    private void resetVisualizer(){
-        visualizerPacked=0;
-        visualizerLowPass=visualizerMidPass=0;
-        visualizerLow=visualizerMid=visualizerHigh=0;
-    }
-
-    private static double smoothLevel(double oldValue,double newValue){
-        double amount=newValue>oldValue?.58:.16;
-        return oldValue+(newValue-oldValue)*amount;
-    }
-
-    private void updateVisualizer(short[] pcm){
-        if(pcm==null||pcm.length<2){visualizerPacked=0;return;}
-        double lowEnergy=0,midEnergy=0,highEnergy=0;
-        int frames=0;
-        for(int i=0;i+1<pcm.length;i+=2){
-            double sample=(pcm[i]+pcm[i+1])*.5;
-            // Split the live mixed SID signal into three responsive bands.
-            visualizerLowPass+=(sample-visualizerLowPass)*.035;
-            visualizerMidPass+=(sample-visualizerMidPass)*.24;
-            double low=visualizerLowPass;
-            double mid=visualizerMidPass-visualizerLowPass;
-            double high=sample-visualizerMidPass;
-            lowEnergy+=low*low;midEnergy+=mid*mid;highEnergy+=high*high;frames++;
-        }
-        if(frames==0)return;
-        double low=Math.min(1000,Math.sqrt(Math.sqrt(lowEnergy/frames)/32768.0)*1120);
-        double mid=Math.min(1000,Math.sqrt(Math.sqrt(midEnergy/frames)/32768.0)*1320);
-        double high=Math.min(1000,Math.sqrt(Math.sqrt(highEnergy/frames)/32768.0)*1580);
-        visualizerLow=smoothLevel(visualizerLow,low);
-        visualizerMid=smoothLevel(visualizerMid,mid);
-        visualizerHigh=smoothLevel(visualizerHigh,high);
-        int a=Math.max(0,Math.min(1000,(int)Math.round(visualizerLow)));
-        int b=Math.max(0,Math.min(1000,(int)Math.round(visualizerMid)));
-        int c=Math.max(0,Math.min(1000,(int)Math.round(visualizerHigh)));
-        visualizerPacked=a|(b<<10)|(c<<20);
-    }
 
     @Override public void onCreate(){
         super.onCreate();instance=this;
@@ -380,19 +328,23 @@ public class PlaybackService extends Service {
                     if(!serviceRunning)break;
                     if(!playing||!sidLoaded)continue;
 
-                    if(loopEnabled&&loopLengthMs>0){
-                        long renderMs=(renderedFrames*1000L)/SAMPLE_RATE;
-                        if(renderMs>=loopLengthMs){
-                            synchronized(lock){
+                    short[] pcm;
+                    long renderGeneration;
+                    synchronized(lock){
+                        if(!serviceRunning||!playing||!sidLoaded)continue;
+                        renderGeneration=generation.get();
+                        if(loopEnabled&&loopLengthMs>0){
+                            long renderMs=(renderedFrames*1000L)/SAMPLE_RATE;
+                            if(renderMs>=loopLengthMs){
                                 try{NativeSid.nativeRestart();}catch(Throwable ignored){}
                                 renderedFrames=0;
                             }
                         }
+                        // libsidplayfp engine access must never overlap unload/reload.
+                        pcm=NativeSid.nativeRender(2048);
                     }
-
-                    short[] pcm=NativeSid.nativeRender(2048);
                     if(pcm==null||pcm.length==0){Thread.sleep(5);continue;}
-                    updateVisualizer(pcm);
+                    if(renderGeneration!=generation.get())continue;
                     AudioTrack t;
                     synchronized(lock){t=audioTrack;}
                     if(t==null)continue;

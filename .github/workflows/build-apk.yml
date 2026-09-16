@@ -21,6 +21,7 @@ jobs:
           javac -d /tmp/sid-compat-tests app/src/main/java/com/example/c64sidplayersimple/SidCompatibility.java tests/SidCompatibilityTest.java
           java -cp /tmp/sid-compat-tests SidCompatibilityTest
           node tests/sid-loader.test.cjs
+          node tests/playback-lifecycle.test.cjs
           node --check app/src/main/assets/tv-power.js
 
       # ubuntu-latest already includes the Android SDK.

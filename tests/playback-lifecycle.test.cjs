@@ -1,0 +1,33 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+
+const html = fs.readFileSync("app/src/main/assets/index.html", "utf8");
+const service = fs.readFileSync(
+  "app/src/main/java/com/example/c64sidplayersimple/PlaybackService.java",
+  "utf8"
+);
+const bridge = fs.readFileSync(
+  "app/src/main/java/com/example/c64sidplayersimple/MainActivity.java",
+  "utf8"
+);
+const tv = fs.readFileSync("app/src/main/assets/tv-power.js", "utf8");
+
+const stopBody = html.match(/function stop\(\)\{([\s\S]*?)\n\}/)?.[1] || "";
+assert.match(stopBody, /nativeUnloadSid/, "STOP must unload without destroying the service");
+assert.doesNotMatch(
+  stopBody,
+  /nativeAndroid\)android\("stopPlaybackService"\)/,
+  "native STOP must not race service destruction against the next PLAY"
+);
+assert.match(html, /attempt<16&&loadGeneration===pcmGeneration/,
+  "native load must tolerate asynchronous foreground-service startup");
+assert.match(html, /if\(loadGeneration!==pcmGeneration\)return/,
+  "stale load requests must be cancelled");
+assert.match(service, /synchronized\(lock\)\{[\s\S]*?pcm=NativeSid\.nativeRender\(2048\)/,
+  "render must hold the same lock used by unload and reload");
+
+for (const [name, source] of [["service", service], ["bridge", bridge], ["TV", tv]]) {
+  assert.doesNotMatch(source, /visualizer|equalizer/i, `${name} must not contain equalizer code`);
+}
+
+console.log("Playback lifecycle regression checks passed.");
