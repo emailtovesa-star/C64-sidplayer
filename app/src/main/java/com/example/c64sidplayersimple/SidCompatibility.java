@@ -11,7 +11,7 @@ public final class SidCompatibility {
     public static byte[] forPlayback(byte[] source) {
         // Match the complete original file, not a filename or composer. Already
         // patched files and other revisions must pass through unchanged.
-        if (source == null || (source.length != 2990 && source.length != 3468 && source.length != 3023 && source.length != 4201)) return source;
+        if (source == null || (source.length != 2990 && source.length != 3468 && source.length != 3023 && source.length != 4201 && source.length != 4453)) return source;
         final String hash;
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(source);
@@ -28,10 +28,11 @@ public final class SidCompatibility {
         boolean fourth = hash.equals("b9b628138d64046239780ac489d99f5689eb26966bfd4f7722a5363667734ab5");
         boolean namnam = hash.equals("2f6241cd490caf9d5b963754df8f142a6d22b77298160187a805cdfaa7f5d062");
         boolean street = hash.equals("9f5338ff6c3597bd8fc5cf22e3da6b7da7af1bf761d7c35e7abcf67e03d66146");
+        boolean dragon = hash.equals("9aaf7e588968baf2dc27941e60236278b75ad563e820749e87b61615e4c45350");
         // This exact Street Cred Boxing rip needs zero-filled trailing data.
         // Verified for both subtunes; keep the original for HVSC identification.
         if (street) return Arrays.copyOf(source, source.length + 3);
-        if (!dmc && !fourth && !namnam) return source;
+        if (!dmc && !fourth && !namnam && !dragon) return source;
 
         // These verified PSID v2 files contain a little-endian load address at
         // offset 124. Their init routines use X; negative X disables playback.

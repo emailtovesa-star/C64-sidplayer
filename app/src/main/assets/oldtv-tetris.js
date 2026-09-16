@@ -209,6 +209,17 @@ function addStyles(){
       box-shadow:0 8px 28px #000c;
     }
     .otMessage.hidden{display:none}
+    .otMessage.pauseOnly{
+      min-width:0;
+      padding:0;
+      border:0;
+      border-radius:0;
+      background:transparent;
+      box-shadow:none;
+      color:#fff;
+      font:bold 18px/1 monospace;
+      text-shadow:0 2px 2px #000,0 0 8px #000;
+    }
     .otC64Art{
       position:absolute;
       inset:0;
@@ -650,12 +661,14 @@ function togglePause(){
   paused=!paused;
   if(paused){
     messageEl.innerHTML="PAUSED";
+    messageEl.classList.add("pauseOnly");
     messageEl.classList.remove("hidden");
     if(pauseBtn){
       pauseBtn.textContent="RESUME";
       pauseBtn.classList.add("active");
     }
   }else{
+    messageEl.classList.remove("pauseOnly");
     messageEl.classList.add("hidden");
     lastDrop=performance.now();
     if(pauseBtn){
@@ -713,6 +726,7 @@ function startGame(){
   nextPiece=randPiece();
   spawn();
   updateStats();
+  messageEl.classList.remove("pauseOnly");
   messageEl.classList.add("hidden");
   if(pauseBtn){
     pauseBtn.textContent="PAUSE";
@@ -728,6 +742,7 @@ function endGame(){
   running=false;
   current=null;
   draw();
+  messageEl.classList.remove("pauseOnly");
   messageEl.innerHTML=`GAME OVER<br>SCORE ${score}<br><br>PRESS START`;
   messageEl.classList.remove("hidden");
   if(pauseBtn){pauseBtn.textContent="PAUSE";pauseBtn.classList.remove("active");}
@@ -749,6 +764,7 @@ function openGame(){
       pauseBtn.classList.add("active");
     }
     messageEl.innerHTML="PAUSED";
+    messageEl.classList.add("pauseOnly");
     messageEl.classList.remove("hidden");
     lastDrop=performance.now();
     if(raf) cancelAnimationFrame(raf);
@@ -773,6 +789,7 @@ function closeGame(){
   if(running && !gameOver){
     paused=true;
     messageEl.innerHTML="PAUSED";
+    messageEl.classList.add("pauseOnly");
     messageEl.classList.remove("hidden");
     if(pauseBtn){
       pauseBtn.textContent="RESUME";

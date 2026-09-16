@@ -55,3 +55,11 @@ Tests verified the two new playback patches against independent test copies,
 retained both older fixes, confirmed both Street Cred Boxing subtunes render
 music, and exercised missing-ROM blocking, default-subtune selection, invalid
 ROM sizes, preservation of original metadata bytes, and native-load failure.
+
+## V4.0.30
+
+- Dragon Sword: the exact verified 4453-byte original stores the incoming CPU
+  X register at the start of its init routine. It receives the same playback-only
+  `LDX #$00; JMP original_init` wrapper as the earlier affected Bjerregaard tunes.
+- Drop Block: the PAUSED overlay is now plain text on the game screen, without
+  the message panel border, background, or shadow frame.

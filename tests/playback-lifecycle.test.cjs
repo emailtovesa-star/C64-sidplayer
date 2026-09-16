@@ -11,6 +11,7 @@ const bridge = fs.readFileSync(
   "utf8"
 );
 const tv = fs.readFileSync("app/src/main/assets/tv-power.js", "utf8");
+const blockDrop = fs.readFileSync("app/src/main/assets/oldtv-tetris.js", "utf8");
 
 const stopBody = html.match(/function stop\(\)\{([\s\S]*?)\n\}/)?.[1] || "";
 assert.match(stopBody, /nativeUnloadSid/, "STOP must unload without destroying the service");
@@ -33,5 +34,9 @@ assert.match(tv, /width:100%/, "striped TV app icon must be 50 percent larger th
 assert.match(tv, /height:100%/, "striped TV app icon must fill the picture height");
 assert.match(tv, /classList\.add\("gifPlaying","stripesPlaying"\)/,
   "the app icon must appear only over the animated stripes screen");
+assert.match(blockDrop, /\.otMessage\.pauseOnly\{[\s\S]*?border:0;[\s\S]*?background:transparent;/,
+  "PAUSED must be plain text without a message frame");
+assert.match(blockDrop, /innerHTML="PAUSED";\s*messageEl\.classList\.add\("pauseOnly"\)/,
+  "PAUSED displays must use the frameless style");
 
 console.log("Playback lifecycle regression checks passed.");
