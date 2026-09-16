@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "V4.0.27";
+  const VERSION = "V4.0.28";
 
   function injectStyles() {
     if (document.getElementById("tvPowerStyles")) return;
@@ -196,9 +196,26 @@
         pointer-events:none;
       }
       .tvGlass.gifPlaying .tvGifAnimation{display:block}
+      .tvAppIcon{
+        position:absolute;
+        left:50%;
+        top:50%;
+        width:66.666%;
+        height:66.666%;
+        transform:translate(-50%,-50%);
+        object-fit:contain;
+        display:none;
+        z-index:3;
+        border-radius:15%;
+        filter:drop-shadow(0 0 8px #000) drop-shadow(0 0 3px #69edff99);
+        pointer-events:none;
+      }
+      .tvGlass.stripesPlaying .tvAppIcon{display:block}
       .tvGlass.gifPlaying .tvOffDot{display:none}
       .tvGlass.gifPlaying::before{z-index:3;opacity:.10}
       .tvGlass.gifPlaying::after{z-index:4}
+      .tvGlass.stripesPlaying::before{z-index:4}
+      .tvGlass.stripesPlaying::after{z-index:5}
       .tvGlass{cursor:pointer;-webkit-tap-highlight-color:transparent}
 
       .tvGlass::before{
@@ -315,7 +332,7 @@
 
   function updateVersion() {
     const title = document.querySelector("title");
-    if (title) title.textContent = "C64 SID Player V4.0.27";
+    if (title) title.textContent = "C64 SID Player V4.0.28";
     const sub = document.querySelector(".sub");
     if (sub) sub.textContent = VERSION;
   }
@@ -342,7 +359,7 @@
       <div class="vintageTv">
         <div class="tvAntenna"></div>
         <div class="tvCabinet">
-          <div class="tvGlass" id="retroTvTouchScreen"><div class="tvOffDot"></div><img class="tvGifAnimation" id="retroTvGif" alt="" draggable="false"></div>
+          <div class="tvGlass" id="retroTvTouchScreen"><div class="tvOffDot"></div><img class="tvGifAnimation" id="retroTvGif" alt="" draggable="false"><img class="tvAppIcon" src="app-icon-tv.png" alt="" draggable="false"></div>
           <div class="tvControlsOld">
             <div class="tvKnob one"></div>
             <div class="tvKnob two"></div>
@@ -373,7 +390,7 @@
         e.stopPropagation();
 
         retroTvDisplayMode = (retroTvDisplayMode + 1) % 3;
-        retroTvTouchScreen.classList.remove("gifPlaying");
+        retroTvTouchScreen.classList.remove("gifPlaying","stripesPlaying");
         retroTvGif.removeAttribute("src");
 
         if (retroTvDisplayMode === 0) {
@@ -385,7 +402,7 @@
         } else if (retroTvDisplayMode === 2) {
           // Shortened stripes / MP4-derived animation.
           retroTvGif.src = "retro-tv-animation.gif";
-          retroTvTouchScreen.classList.add("gifPlaying");
+          retroTvTouchScreen.classList.add("gifPlaying","stripesPlaying");
         }
       });
     }
