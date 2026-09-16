@@ -120,6 +120,7 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public int bufferedMs() { return PlaybackService.getBufferedMs(); }
         @JavascriptInterface public long playedMs() { return PlaybackService.getPlayedMs(); }
+        @JavascriptInterface public int nativeVisualizerLevels() { return PlaybackService.getVisualizerLevels(); }
 
         @JavascriptInterface public void enqueuePcm(String ignored) {}
         @JavascriptInterface public void resetAudioOutput() {}
