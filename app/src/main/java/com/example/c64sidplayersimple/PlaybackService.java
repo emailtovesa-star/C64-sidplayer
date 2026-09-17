@@ -29,6 +29,10 @@ public class PlaybackService extends Service {
     private volatile long loopLengthMs=0;
     private volatile long renderedFrames=0;
     private volatile long playedBaseFrames=0;
+    private volatile boolean basicTune=false;
+    private volatile long audibleStartRenderedFrames=0;
+    private volatile long basicInitStartRenderedFrames=0;
+    private volatile long basicLeadInFrames=0;
 
     private volatile String songTitle="C64 SID Player";
     private volatile String composer="UNKNOWN";
@@ -43,6 +47,24 @@ public class PlaybackService extends Service {
         return ((long)t.getPlaybackHeadPosition()) & 0xffffffffL;
     }
 
+    private static boolean isBasicTune(byte[] data) {
+        return data!=null && data.length>=120 && data[0]=='R' && data[1]=='S' &&
+            data[2]=='I' && data[3]=='D' && (data[119]&0x02)!=0;
+    }
+
+    private void resetTuneClock() {
+        renderedFrames=0;
+        basicLeadInFrames=0;
+        basicInitStartRenderedFrames=0;
+        audibleStartRenderedFrames=basicTune?-1:0;
+    }
+
+    private static boolean hasAudibleSamples(short[] pcm) {
+        if(pcm==null)return false;
+        for(short sample:pcm)if(Math.abs((int)sample)>128)return true;
+        return false;
+    }
+
     private void sendUiCommand(String cmd){
         try{ MainActivity.dispatchMediaCommand(cmd); }catch(Throwable ignored){}
     }
@@ -53,7 +75,7 @@ public class PlaybackService extends Service {
             if(s!=null){
                 s.generation.incrementAndGet();s.playing=false;s.sidLoaded=false;
                 try{if(s.audioTrack!=null){s.audioTrack.pause();s.audioTrack.flush();}}catch(Throwable ignored){}
-                s.renderedFrames=0;s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
+                s.resetTuneClock();s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
                 s.updateNotification();
             }
             try{NativeSid.nativeUnload();}catch(Throwable ignored){}
@@ -72,7 +94,8 @@ public class PlaybackService extends Service {
             // Native restarts reuse this playback copy, including its init fix.
             try { ok=NativeSid.nativeLoad(SidCompatibility.forPlayback(data),subsong); } catch(Throwable t){ ok=false; }
             s.sidLoaded=ok;
-            s.renderedFrames=0;
+            s.basicTune=isBasicTune(data);
+            s.resetTuneClock();
             s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
             s.updateNotification();
             return ok;
@@ -105,7 +128,7 @@ public class PlaybackService extends Service {
             s.playing=false;
             try{if(s.audioTrack!=null){s.audioTrack.pause();s.audioTrack.flush();}}catch(Throwable ignored){}
             try{NativeSid.nativeRestart();}catch(Throwable ignored){}
-            s.renderedFrames=0;
+            s.resetTuneClock();
             s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
             s.playing=true;
             try{if(s.audioTrack!=null)s.audioTrack.play();}catch(Throwable ignored){}
@@ -133,7 +156,7 @@ public class PlaybackService extends Service {
 
             if(ok && s.sidLoaded){
                 try{ok=NativeSid.nativeRestart();}catch(Throwable t){ok=false;}
-                s.renderedFrames=0;
+                s.resetTuneClock();
                 s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
             }
 
@@ -173,7 +196,8 @@ public class PlaybackService extends Service {
         try{
             long now=unsignedHead(audioTrack);
             long frames=(now-playedBaseFrames)&0xffffffffL;
-            long ms=(frames*1000L)/SAMPLE_RATE;
+            long audibleFrames=basicTune?Math.max(0,frames-basicLeadInFrames):frames;
+            long ms=(audibleFrames*1000L)/SAMPLE_RATE;
             if(loopEnabled&&loopLengthMs>0)ms%=loopLengthMs;
             if(!loopEnabled&&songDurationMs>0)ms=Math.min(ms,songDurationMs);
             return Math.max(0,ms);
@@ -333,15 +357,20 @@ public class PlaybackService extends Service {
                     synchronized(lock){
                         if(!serviceRunning||!playing||!sidLoaded)continue;
                         renderGeneration=generation.get();
-                        if(loopEnabled&&loopLengthMs>0){
-                            long renderMs=(renderedFrames*1000L)/SAMPLE_RATE;
+                        if(loopEnabled&&loopLengthMs>0&&audibleStartRenderedFrames>=0){
+                            long renderMs=((renderedFrames-audibleStartRenderedFrames)*1000L)/SAMPLE_RATE;
                             if(renderMs>=loopLengthMs){
                                 try{NativeSid.nativeRestart();}catch(Throwable ignored){}
-                                renderedFrames=0;
+                                basicInitStartRenderedFrames=renderedFrames;
+                                audibleStartRenderedFrames=basicTune?-1:renderedFrames;
                             }
                         }
                         // libsidplayfp engine access must never overlap unload/reload.
                         pcm=NativeSid.nativeRender(2048);
+                        if(basicTune&&audibleStartRenderedFrames<0&&hasAudibleSamples(pcm)){
+                            audibleStartRenderedFrames=renderedFrames;
+                            basicLeadInFrames+=Math.max(0,renderedFrames-basicInitStartRenderedFrames);
+                        }
                     }
                     if(pcm==null||pcm.length==0){Thread.sleep(5);continue;}
                     if(renderGeneration!=generation.get())continue;

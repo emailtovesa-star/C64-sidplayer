@@ -13,6 +13,7 @@ const bridge = fs.readFileSync(
 );
 const tv = fs.readFileSync("app/src/main/assets/tv-power.js", "utf8");
 const blockDrop = fs.readFileSync("app/src/main/assets/oldtv-tetris.js", "utf8");
+const worker = fs.readFileSync("app/src/main/assets/sid-worker.js", "utf8");
 
 const stopBody = html.match(/function stop\(\)\{([\s\S]*?)\n\}/)?.[1] || "";
 const changeRomsBody = html.match(/async function changeRoms\(kind,file\)\{([\s\S]*?)\n\}/)?.[1] || "";
@@ -47,6 +48,24 @@ assert.match(changeRomsBody, /if\(affectsCurrent\)\{pauseInternal/,
   "ROM changes may pause only a BASIC-dependent current tune");
 assert.doesNotMatch(nativeSetRomsBody, /PlaybackService\.unloadSid/,
   "setting ROMs must not unload the currently playing native SID");
+assert.match(service, /basicLeadInFrames\+=Math\.max\(0,renderedFrames-basicInitStartRenderedFrames\)/,
+  "native BASIC timing must remember silent interpreter startup frames");
+assert.match(service, /frames-basicLeadInFrames/,
+  "native play time must exclude BASIC interpreter startup");
+
+const timingContext = {};
+vm.createContext(timingContext);
+vm.runInContext(worker.match(/function isBasicRsid\(bytes\)\{[\s\S]*?\n\}/)[0], timingContext);
+vm.runInContext(worker.match(/function hasAudiblePcm\(pcm\)\{[\s\S]*?\n\}/)[0], timingContext);
+const basicRsid = new Uint8Array(120);
+basicRsid.set(Buffer.from("RSID"));
+basicRsid[119] = 0x02;
+assert.equal(timingContext.isBasicRsid(basicRsid), true,
+  "a BASIC RSID must use audible-start timing");
+assert.equal(timingContext.hasAudiblePcm(new Int16Array([0, 64, -128])), false,
+  "small emulator residuals must remain part of BASIC startup silence");
+assert.equal(timingContext.hasAudiblePcm(new Int16Array([0, 129])), true,
+  "real SID output must start the audible song clock");
 
 const searchContext = {
   playlistSearchQuery: "BASIC",
@@ -60,4 +79,4 @@ assert.equal(searchContext.playlistSearchMatch({
   header:{name:"American Flag",author:"Jeroen Kimmel"}
 }), true, "search must match BASIC in the original filename even when header metadata exists");
 
-console.log("Playback lifecycle and filename-search regression checks passed.");
+console.log("Playback lifecycle, BASIC timing, and filename-search regression checks passed.");

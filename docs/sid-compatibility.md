@@ -78,3 +78,9 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - Playlist search now always checks the original SID filename independently of
   its internal title and author fields. For example, searching `BASIC` finds
   `American_Flag_BASIC.sid` even when its PSID/RSID title omits that suffix.
+
+## V4.0.33
+
+- BASIC RSID song timing begins at the first audible SID output instead of at
+  the start of the BASIC interpreter. This keeps long BASIC setup routines from
+  consuming the HVSC song length and stopping a tune before its first note.

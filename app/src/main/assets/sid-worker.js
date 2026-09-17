@@ -5,6 +5,7 @@ let playing=false, generation=0, pcmGeneration=1;
 let sourceBytes=null, currentSong=0;
 let roms={kernal:null,basic:null,chargen:null};
 let songlengths=new Map(), loopOne=false, loopSeconds=null, elapsedFrames=0, channels=2;
+let basicTune=false, audioStarted=true;
 
 function post(type, data={}) { self.postMessage({type, ...data}); }
 
@@ -42,6 +43,13 @@ async function loadSonglengths(){
   }catch(e){ post("db",{entries:0,error:String(e)}); }
 }
 function currentSeconds(){ return elapsedFrames/44100; }
+function isBasicRsid(bytes){
+  return !!bytes&&bytes.length>=120&&bytes[0]===82&&bytes[1]===83&&bytes[2]===73&&bytes[3]===68&&(bytes[119]&2)!==0;
+}
+function hasAudiblePcm(pcm){
+  for(const sample of pcm)if(Math.abs(sample)>128)return true;
+  return false;
+}
 
 async function init(){
   try{
@@ -97,6 +105,8 @@ async function makePlayer(bytes,song){
   const lengths=songlengths.get(md5);
   loopSeconds=(lengths && Number.isFinite(lengths[s])) ? lengths[s] : null;
   elapsedFrames=0;
+  basicTune=isBasicRsid(bytes);
+  audioStarted=!basicTune;
   post("duration",{seconds:loopSeconds,md5,sub:s,dbEntries:songlengths.size});
   return s;
 }
@@ -121,7 +131,8 @@ async function renderLoop(gen){
         pcm=pcm.slice();
         parts.push(pcm);
         totalSamples += pcm.length;
-        elapsedFrames += pcm.length/channels;
+        if(!audioStarted&&hasAudiblePcm(pcm))audioStarted=true;
+        if(audioStarted)elapsedFrames += pcm.length/channels;
         producedMs = (totalSamples/ch/44100)*1000;
         if(loopOne && loopSeconds && currentSeconds()>=loopSeconds) break;
       }
