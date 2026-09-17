@@ -46,6 +46,7 @@ public class PlaybackService extends Service {
     private volatile long renderedFrames=0;
     private volatile long playedBaseFrames=0;
     private volatile boolean basicTune=false;
+    private volatile boolean fastBasicStartup=false;
     private volatile long audibleStartRenderedFrames=0;
     private volatile long basicInitStartRenderedFrames=0;
     private volatile long basicLeadInFrames=0;
@@ -140,6 +141,7 @@ public class PlaybackService extends Service {
             if(!ok)return null;
             sidLoaded=true;
             basicTune=isBasicTune(track.data);
+            fastBasicStartup=SidCompatibility.usesFastBasicStartup(track.data);
             resetTuneClock();
             playedBaseFrames=audioTrack!=null?unsignedHead(audioTrack):0;
             songTitle=track.title;composer=track.author;songDurationMs=0;
@@ -184,6 +186,7 @@ public class PlaybackService extends Service {
             try { ok=NativeSid.nativeLoad(SidCompatibility.forPlayback(data),subsong); } catch(Throwable t){ ok=false; }
             s.sidLoaded=ok;
             s.basicTune=isBasicTune(data);
+            s.fastBasicStartup=SidCompatibility.usesFastBasicStartup(data);
             s.resetTuneClock();
             s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
             s.updateNotification();
@@ -460,6 +463,7 @@ public class PlaybackService extends Service {
 
                     short[] pcm;
                     long renderGeneration;
+                    boolean skipSilentBasicPcm;
                     synchronized(lock){
                         if(!serviceRunning||!playing||!sidLoaded)continue;
                         renderGeneration=generation.get();
@@ -477,12 +481,19 @@ public class PlaybackService extends Service {
                         }
                         // libsidplayfp engine access must never overlap unload/reload.
                         pcm=NativeSid.nativeRender(2048);
+                        skipSilentBasicPcm=false;
                         if(basicTune&&audibleStartRenderedFrames<0){
                             final boolean audible=hasAudibleSamples(pcm);
                             final long pcmFrames=pcm==null?0:pcm.length/2;
                             if(!basicAudioArmed){
                                 if(audible)basicQuietFrames=0;
                                 else if((basicQuietFrames+=pcmFrames)>=SAMPLE_RATE/2)basicAudioArmed=true;
+                            }else if(fastBasicStartup&&audible){
+                                // This exact BASIC program spends a very long time in a
+                                // silent setup loop. Its first post-boot SID output is music,
+                                // so start real-time audio here after rendering setup ahead.
+                                audibleStartRenderedFrames=renderedFrames;
+                                basicLeadInFrames=0;
                             }else if(audible){
                                 if(basicAudibleCandidateFrames==0)
                                     basicCandidateStartRenderedFrames=renderedFrames;
@@ -494,10 +505,13 @@ public class PlaybackService extends Service {
                             }else{
                                 basicAudibleCandidateFrames=0;
                             }
+                            skipSilentBasicPcm=fastBasicStartup&&audibleStartRenderedFrames<0;
                         }
+                        if(skipSilentBasicPcm&&pcm!=null)renderedFrames+=pcm.length/2;
                     }
                     if(pcm==null||pcm.length==0){Thread.sleep(5);continue;}
                     if(renderGeneration!=generation.get())continue;
+                    if(skipSilentBasicPcm)continue;
                     AudioTrack t;
                     synchronized(lock){t=audioTrack;}
                     if(t==null)continue;

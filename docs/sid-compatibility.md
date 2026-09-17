@@ -114,3 +114,10 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - BASIC initialization now ends only after sustained musical PCM output.
   Brief startup clicks, SID register setup, and isolated noise no longer remove
   the initialization message while the BASIC program is still working.
+
+## V4.0.39
+
+- God Save the King BASIC: the exact verified 5,840-byte original fast-forwards
+  its unusually long silent BASIC interpreter setup. Playback returns to normal
+  real time at the first SID music output. The source SID remains unchanged and
+  all other BASIC tunes retain the existing sustained-audio startup detector.

@@ -6,13 +6,18 @@ import java.util.Arrays;
 
 /** Playback-only fixes for verified SID files. Never changes the source bytes. */
 public final class SidCompatibility {
+    private static final String GOD_SAVE_THE_KING_BASIC_SHA256 =
+            "dc3fdc73975f848bb357d9555b5cb51c23eb3c1b590ee4ed24630348caca05cf";
+
     private SidCompatibility() {}
 
-    public static byte[] forPlayback(byte[] source) {
-        // Match the complete original file, not a filename or composer. Already
-        // patched files and other revisions must pass through unchanged.
-        if (source == null || (source.length != 2990 && source.length != 3468 && source.length != 3023 && source.length != 4201 && source.length != 4453)) return source;
-        final String hash;
+    /** Exact BASIC programs whose silent interpreter setup is safe to render ahead. */
+    public static boolean usesFastBasicStartup(byte[] source) {
+        return source != null && source.length == 5840 &&
+                GOD_SAVE_THE_KING_BASIC_SHA256.equals(sha256(source));
+    }
+
+    private static String sha256(byte[] source) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(source);
             StringBuilder hex = new StringBuilder(64);
@@ -20,10 +25,17 @@ public final class SidCompatibility {
                 hex.append(Character.forDigit((b >>> 4) & 15, 16));
                 hex.append(Character.forDigit(b & 15, 16));
             }
-            hash = hex.toString();
+            return hex.toString();
         } catch (NoSuchAlgorithmException e) {
-            return source;
+            return "";
         }
+    }
+
+    public static byte[] forPlayback(byte[] source) {
+        // Match the complete original file, not a filename or composer. Already
+        // patched files and other revisions must pass through unchanged.
+        if (source == null || (source.length != 2990 && source.length != 3468 && source.length != 3023 && source.length != 4201 && source.length != 4453)) return source;
+        final String hash=sha256(source);
         boolean dmc = hash.equals("6f240d33fa5ead6bd3a5a6f84d6cc19f1e921d25af3eed9a69d90e9f54239699");
         boolean fourth = hash.equals("b9b628138d64046239780ac489d99f5689eb26966bfd4f7722a5363667734ab5");
         boolean namnam = hash.equals("2f6241cd490caf9d5b963754df8f142a6d22b77298160187a805cdfaa7f5d062");
