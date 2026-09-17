@@ -74,8 +74,10 @@ assert.match(service, /basicAudibleCandidateFrames>=SAMPLE_RATE\*3\/4/,
   "brief BASIC startup sounds must not finish initialization");
 assert.match(worker, /basicCandidateFrames>=44100\*3\/4/,
   "worker timing must also require sustained BASIC music");
-assert.match(service, /fastBasicStartup&&audible/,
-  "the verified slow BASIC tune must switch to real-time playback at its first music");
+assert.match(service, /if\(fastBasicStartup\)fastBasicCandidatePcm\.add\(pcm\)/,
+  "the verified slow BASIC tune must buffer candidate music while fast-forwarding");
+assert.match(service, /basicAudibleCandidateFrames>=SAMPLE_RATE\*3\/4[\s\S]*?pcm=buffered/,
+  "the verified slow BASIC tune must reject short setup sounds and preserve sustained music");
 assert.match(service, /skipSilentBasicPcm=fastBasicStartup&&audibleStartRenderedFrames<0/,
   "the verified slow BASIC tune must render its silent setup without blocking on AudioTrack");
 assert.match(service, /if\(skipSilentBasicPcm\)continue/,

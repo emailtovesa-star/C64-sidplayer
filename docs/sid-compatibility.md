@@ -121,3 +121,10 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
   its unusually long silent BASIC interpreter setup. Playback returns to normal
   real time at the first SID music output. The source SID remains unchanged and
   all other BASIC tunes retain the existing sustained-audio startup detector.
+
+## V4.0.40
+
+- God Save the King BASIC startup no longer mistakes its brief, quiet setup
+  sound for the beginning of the song. Candidate audio must remain musical for
+  0.75 seconds, and those samples are buffered so the first real notes are not
+  lost when accelerated initialization switches to normal playback.

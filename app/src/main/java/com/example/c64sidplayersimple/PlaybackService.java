@@ -54,6 +54,7 @@ public class PlaybackService extends Service {
     private volatile long basicQuietFrames=0;
     private volatile long basicAudibleCandidateFrames=0;
     private volatile long basicCandidateStartRenderedFrames=0;
+    private final ArrayList<short[]> fastBasicCandidatePcm=new ArrayList<>();
 
     private volatile String songTitle="C64 SID Player";
     private volatile String composer="UNKNOWN";
@@ -82,6 +83,7 @@ public class PlaybackService extends Service {
         basicQuietFrames=0;
         basicAudibleCandidateFrames=0;
         basicCandidateStartRenderedFrames=0;
+        fastBasicCandidatePcm.clear();
     }
 
     private static boolean hasAudibleSamples(short[] pcm) {
@@ -477,6 +479,7 @@ public class PlaybackService extends Service {
                                 basicQuietFrames=0;
                                 basicAudibleCandidateFrames=0;
                                 basicCandidateStartRenderedFrames=renderedFrames;
+                                fastBasicCandidatePcm.clear();
                             }
                         }
                         // libsidplayfp engine access must never overlap unload/reload.
@@ -488,22 +491,35 @@ public class PlaybackService extends Service {
                             if(!basicAudioArmed){
                                 if(audible)basicQuietFrames=0;
                                 else if((basicQuietFrames+=pcmFrames)>=SAMPLE_RATE/2)basicAudioArmed=true;
-                            }else if(fastBasicStartup&&audible){
-                                // This exact BASIC program spends a very long time in a
-                                // silent setup loop. Its first post-boot SID output is music,
-                                // so start real-time audio here after rendering setup ahead.
-                                audibleStartRenderedFrames=renderedFrames;
-                                basicLeadInFrames=0;
                             }else if(audible){
                                 if(basicAudibleCandidateFrames==0)
                                     basicCandidateStartRenderedFrames=renderedFrames;
+                                if(fastBasicStartup)fastBasicCandidatePcm.add(pcm);
                                 basicAudibleCandidateFrames+=pcmFrames;
                                 if(basicAudibleCandidateFrames>=SAMPLE_RATE*3/4){
-                                    audibleStartRenderedFrames=basicCandidateStartRenderedFrames;
-                                    basicLeadInFrames+=Math.max(0,basicCandidateStartRenderedFrames-basicInitStartRenderedFrames);
+                                    if(fastBasicStartup){
+                                        int samples=0;
+                                        for(short[] part:fastBasicCandidatePcm)samples+=part.length;
+                                        short[] buffered=new short[samples];
+                                        int position=0;
+                                        for(short[] part:fastBasicCandidatePcm){
+                                            System.arraycopy(part,0,buffered,position,part.length);
+                                            position+=part.length;
+                                        }
+                                        long previousCandidateFrames=Math.max(0,basicAudibleCandidateFrames-pcmFrames);
+                                        renderedFrames=Math.max(basicInitStartRenderedFrames,renderedFrames-previousCandidateFrames);
+                                        pcm=buffered;
+                                        audibleStartRenderedFrames=renderedFrames;
+                                        basicLeadInFrames=0;
+                                        fastBasicCandidatePcm.clear();
+                                    }else{
+                                        audibleStartRenderedFrames=basicCandidateStartRenderedFrames;
+                                        basicLeadInFrames+=Math.max(0,basicCandidateStartRenderedFrames-basicInitStartRenderedFrames);
+                                    }
                                 }
                             }else{
                                 basicAudibleCandidateFrames=0;
+                                fastBasicCandidatePcm.clear();
                             }
                             skipSilentBasicPcm=fastBasicStartup&&audibleStartRenderedFrames<0;
                         }
