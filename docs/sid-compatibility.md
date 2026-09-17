@@ -108,3 +108,9 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - The status area shows `Initializing BASIC tune…` while a BASIC RSID is
   silently running its startup code. It returns to the normal playing message
   as soon as native playback detects the first real music.
+
+## V4.0.38
+
+- BASIC initialization now ends only after sustained musical PCM output.
+  Brief startup clicks, SID register setup, and isolated noise no longer remove
+  the initialization message while the BASIC program is still working.

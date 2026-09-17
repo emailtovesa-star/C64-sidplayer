@@ -48,7 +48,7 @@ assert.match(changeRomsBody, /if\(affectsCurrent\)\{pauseInternal/,
   "ROM changes may pause only a BASIC-dependent current tune");
 assert.doesNotMatch(nativeSetRomsBody, /PlaybackService\.unloadSid/,
   "setting ROMs must not unload the currently playing native SID");
-assert.match(service, /basicLeadInFrames\+=Math\.max\(0,renderedFrames-basicInitStartRenderedFrames\)/,
+assert.match(service, /basicLeadInFrames\+=Math\.max\(0,basicCandidateStartRenderedFrames-basicInitStartRenderedFrames\)/,
   "native BASIC timing must remember silent interpreter startup frames");
 assert.match(service, /frames-basicLeadInFrames/,
   "native play time must exclude BASIC interpreter startup");
@@ -70,6 +70,10 @@ assert.match(service, /return played<s\.basicLeadInFrames/,
   "the native service must expose the BASIC initialization state");
 assert.match(html, /status\("Initializing BASIC tune…"\)/,
   "the UI must explain the silent BASIC startup period");
+assert.match(service, /basicAudibleCandidateFrames>=SAMPLE_RATE\*3\/4/,
+  "brief BASIC startup sounds must not finish initialization");
+assert.match(worker, /basicCandidateFrames>=44100\*3\/4/,
+  "worker timing must also require sustained BASIC music");
 
 const timingContext = {};
 vm.createContext(timingContext);
@@ -82,7 +86,7 @@ assert.equal(timingContext.isBasicRsid(basicRsid), true,
   "a BASIC RSID must use audible-start timing");
 assert.equal(timingContext.hasAudiblePcm(new Int16Array([0, 64, -128])), false,
   "small emulator residuals must remain part of BASIC startup silence");
-assert.equal(timingContext.hasAudiblePcm(new Int16Array([0, 129])), true,
+assert.equal(timingContext.hasAudiblePcm(new Int16Array(64).fill(1000)), true,
   "real SID output must start the audible song clock");
 
 const searchContext = {

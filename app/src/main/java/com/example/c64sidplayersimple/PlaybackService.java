@@ -51,6 +51,8 @@ public class PlaybackService extends Service {
     private volatile long basicLeadInFrames=0;
     private volatile boolean basicAudioArmed=false;
     private volatile long basicQuietFrames=0;
+    private volatile long basicAudibleCandidateFrames=0;
+    private volatile long basicCandidateStartRenderedFrames=0;
 
     private volatile String songTitle="C64 SID Player";
     private volatile String composer="UNKNOWN";
@@ -77,12 +79,21 @@ public class PlaybackService extends Service {
         audibleStartRenderedFrames=basicTune?-1:0;
         basicAudioArmed=!basicTune;
         basicQuietFrames=0;
+        basicAudibleCandidateFrames=0;
+        basicCandidateStartRenderedFrames=0;
     }
 
     private static boolean hasAudibleSamples(short[] pcm) {
-        if(pcm==null)return false;
-        for(short sample:pcm)if(Math.abs((int)sample)>128)return true;
-        return false;
+        if(pcm==null||pcm.length==0)return false;
+        long energy=0;
+        int musicalSamples=0;
+        for(short sample:pcm){
+            int value=(int)sample;
+            int amplitude=Math.abs(value);
+            energy+=(long)value*value;
+            if(amplitude>256)musicalSamples++;
+        }
+        return musicalSamples>=pcm.length/32 && energy/pcm.length>192L*192L;
     }
 
     private void sendUiCommand(String cmd){
@@ -460,6 +471,8 @@ public class PlaybackService extends Service {
                                 audibleStartRenderedFrames=basicTune?-1:renderedFrames;
                                 basicAudioArmed=!basicTune;
                                 basicQuietFrames=0;
+                                basicAudibleCandidateFrames=0;
+                                basicCandidateStartRenderedFrames=renderedFrames;
                             }
                         }
                         // libsidplayfp engine access must never overlap unload/reload.
@@ -471,8 +484,15 @@ public class PlaybackService extends Service {
                                 if(audible)basicQuietFrames=0;
                                 else if((basicQuietFrames+=pcmFrames)>=SAMPLE_RATE/2)basicAudioArmed=true;
                             }else if(audible){
-                                audibleStartRenderedFrames=renderedFrames;
-                                basicLeadInFrames+=Math.max(0,renderedFrames-basicInitStartRenderedFrames);
+                                if(basicAudibleCandidateFrames==0)
+                                    basicCandidateStartRenderedFrames=renderedFrames;
+                                basicAudibleCandidateFrames+=pcmFrames;
+                                if(basicAudibleCandidateFrames>=SAMPLE_RATE*3/4){
+                                    audibleStartRenderedFrames=basicCandidateStartRenderedFrames;
+                                    basicLeadInFrames+=Math.max(0,basicCandidateStartRenderedFrames-basicInitStartRenderedFrames);
+                                }
+                            }else{
+                                basicAudibleCandidateFrames=0;
                             }
                         }
                     }

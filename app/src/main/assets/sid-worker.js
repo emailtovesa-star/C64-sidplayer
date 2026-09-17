@@ -5,7 +5,7 @@ let playing=false, generation=0, pcmGeneration=1;
 let sourceBytes=null, currentSong=0;
 let roms={kernal:null,basic:null,chargen:null};
 let songlengths=new Map(), loopOne=false, loopSeconds=null, elapsedFrames=0, channels=2;
-let basicTune=false, audioStarted=true, basicAudioArmed=true, basicQuietFrames=0;
+let basicTune=false, audioStarted=true, basicAudioArmed=true, basicQuietFrames=0, basicCandidateFrames=0;
 
 function post(type, data={}) { self.postMessage({type, ...data}); }
 
@@ -47,8 +47,14 @@ function isBasicRsid(bytes){
   return !!bytes&&bytes.length>=120&&bytes[0]===82&&bytes[1]===83&&bytes[2]===73&&bytes[3]===68&&(bytes[119]&2)!==0;
 }
 function hasAudiblePcm(pcm){
-  for(const sample of pcm)if(Math.abs(sample)>128)return true;
-  return false;
+  if(!pcm||!pcm.length)return false;
+  let energy=0,musicalSamples=0;
+  for(const sample of pcm){
+    const amplitude=Math.abs(sample);
+    energy+=sample*sample;
+    if(amplitude>256)musicalSamples++;
+  }
+  return musicalSamples>=pcm.length/32&&energy/pcm.length>192*192;
 }
 
 async function init(){
@@ -109,6 +115,7 @@ async function makePlayer(bytes,song){
   audioStarted=!basicTune;
   basicAudioArmed=!basicTune;
   basicQuietFrames=0;
+  basicCandidateFrames=0;
   post("duration",{seconds:loopSeconds,md5,sub:s,dbEntries:songlengths.size});
   return s;
 }
@@ -138,7 +145,13 @@ async function renderLoop(gen){
           if(!basicAudioArmed){
             if(audible)basicQuietFrames=0;
             else if((basicQuietFrames+=pcm.length/channels)>=44100/2)basicAudioArmed=true;
-          }else if(audible)audioStarted=true;
+          }else if(audible){
+            basicCandidateFrames+=pcm.length/channels;
+            if(basicCandidateFrames>=44100*3/4){
+              audioStarted=true;
+              elapsedFrames=basicCandidateFrames;
+            }
+          }else basicCandidateFrames=0;
         }
         if(audioStarted)elapsedFrames += pcm.length/channels;
         producedMs = (totalSamples/ch/44100)*1000;
