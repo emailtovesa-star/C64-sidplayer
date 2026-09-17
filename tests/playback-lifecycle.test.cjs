@@ -66,6 +66,10 @@ assert.match(html, /nativePlaylistAdd/,
   "the WebView playlist must be mirrored for wake-safe native song changes");
 assert.match(html, /adoptNativeSong\(Number\(cmd\.slice\(7\)\)\)/,
   "the WebView must synchronize after a native lock-screen song change");
+assert.match(service, /return played<s\.basicLeadInFrames/,
+  "the native service must expose the BASIC initialization state");
+assert.match(html, /status\("Initializing BASIC tune…"\)/,
+  "the UI must explain the silent BASIC startup period");
 
 const timingContext = {};
 vm.createContext(timingContext);

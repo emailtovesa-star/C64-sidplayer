@@ -129,6 +129,9 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public int bufferedMs() { return PlaybackService.getBufferedMs(); }
         @JavascriptInterface public long playedMs() { return PlaybackService.getPlayedMs(); }
+        @JavascriptInterface public boolean nativeBasicInitializing() {
+            return PlaybackService.isBasicInitializing();
+        }
         @JavascriptInterface public void enqueuePcm(String ignored) {}
         @JavascriptInterface public void resetAudioOutput() {}
         @JavascriptInterface public void clearPcm() {}

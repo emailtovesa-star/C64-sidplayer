@@ -102,3 +102,9 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - Lock-screen and notification PREVIOUS/NEXT controls switch songs directly in
   the foreground playback service. They no longer wait for Android to wake the
   WebView; the app screen synchronizes to the native selection afterward.
+
+## V4.0.37
+
+- The status area shows `Initializing BASIC tune…` while a BASIC RSID is
+  silently running its startup code. It returns to the normal playing message
+  as soon as native playback detects the first real music.

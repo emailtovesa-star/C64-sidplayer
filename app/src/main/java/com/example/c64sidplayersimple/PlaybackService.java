@@ -285,6 +285,18 @@ public class PlaybackService extends Service {
 
     public static int getBufferedMs(){return 0;}
 
+    public static boolean isBasicInitializing(){
+        PlaybackService s=instance;
+        if(s==null)return false;
+        synchronized(lock){
+            if(!s.playing||!s.basicTune)return false;
+            if(s.audibleStartRenderedFrames<0)return true;
+            if(s.audioTrack==null)return false;
+            long played=(unsignedHead(s.audioTrack)-s.playedBaseFrames)&0xffffffffL;
+            return played<s.basicLeadInFrames;
+        }
+    }
+
     @Override public void onCreate(){
         super.onCreate();instance=this;
         try{
