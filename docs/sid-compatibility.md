@@ -128,3 +128,10 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
   sound for the beginning of the song. Candidate audio must remain musical for
   0.75 seconds, and those samples are buffered so the first real notes are not
   lost when accelerated initialization switches to normal playback.
+
+## V4.0.41
+
+- The `Initializing BASIC tune…` status is now restored whenever another
+  asynchronous status update overwrites it. It remains visible for the full
+  native BASIC initialization period and changes to the playing message only
+  after music has been confirmed.

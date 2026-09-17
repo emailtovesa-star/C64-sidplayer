@@ -70,6 +70,8 @@ assert.match(service, /return played<s\.basicLeadInFrames/,
   "the native service must expose the BASIC initialization state");
 assert.match(html, /status\("Initializing BASIC tune…"\)/,
   "the UI must explain the silent BASIC startup period");
+assert.match(html, /if\(\$\("status"\)\.textContent!=="Initializing BASIC tune…"\)status\("Initializing BASIC tune…"\)/,
+  "other status updates must not permanently hide BASIC initialization");
 assert.match(service, /basicAudibleCandidateFrames>=SAMPLE_RATE\*3\/4/,
   "brief BASIC startup sounds must not finish initialization");
 assert.match(worker, /basicCandidateFrames>=44100\*3\/4/,
