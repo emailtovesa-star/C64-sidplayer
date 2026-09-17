@@ -14,6 +14,8 @@ const tv = fs.readFileSync("app/src/main/assets/tv-power.js", "utf8");
 const blockDrop = fs.readFileSync("app/src/main/assets/oldtv-tetris.js", "utf8");
 
 const stopBody = html.match(/function stop\(\)\{([\s\S]*?)\n\}/)?.[1] || "";
+const changeRomsBody = html.match(/async function changeRoms\(kind,file\)\{([\s\S]*?)\n\}/)?.[1] || "";
+const nativeSetRomsBody = bridge.match(/nativeSetRoms\(String kernal, String basic\) \{([\s\S]*?)\n        \}/)?.[1] || "";
 assert.match(stopBody, /nativeUnloadSid/, "STOP must unload without destroying the service");
 assert.doesNotMatch(
   stopBody,
@@ -38,5 +40,11 @@ assert.match(blockDrop, /\.otMessage\.pauseOnly\{[\s\S]*?border:0;[\s\S]*?backgr
   "PAUSED must be plain text without a message frame");
 assert.match(blockDrop, /innerHTML="PAUSED";\s*messageEl\.classList\.add\("pauseOnly"\)/,
   "PAUSED displays must use the frameless style");
+assert.match(changeRomsBody, /!kind && !c64Roms\.basic && !c64Roms\.kernal/,
+  "removing absent ROMs must be a no-op");
+assert.match(changeRomsBody, /if\(affectsCurrent\)\{pauseInternal/,
+  "ROM changes may pause only a BASIC-dependent current tune");
+assert.doesNotMatch(nativeSetRomsBody, /PlaybackService\.unloadSid/,
+  "setting ROMs must not unload the currently playing native SID");
 
 console.log("Playback lifecycle regression checks passed.");

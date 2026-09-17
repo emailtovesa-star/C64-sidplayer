@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.30</title>
+<title>C64 SID Player V4.0.31</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -152,7 +152,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 <div class="logoZone" aria-label="C64 SID Player">
   <div id="starField" class="starField" aria-hidden="true"></div>
   <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
-  <div class="sub">V4.0.30</div>
+  <div class="sub">V4.0.31</div>
 </div>
 <div class="panel">
 <div class="screen" id="songInfoScreen">
@@ -248,13 +248,19 @@ async function changeRoms(kind,file){
   try{
     const bytes=file?new Uint8Array(await file.arrayBuffer()):null;
     if(bytes && bytes.length!==8192)throw new Error("Select an 8192-byte C64 "+kind.toUpperCase()+" ROM file.");
-    pauseInternal(true);playbackReady=false;
+    if(!kind && !c64Roms.basic && !c64Roms.kernal){
+      updateRomState();status("No C64 ROMs are loaded.");return;
+    }
+    const affectsCurrent=!!(currentBytes&&needsBasicRoms(currentBytes));
+    const resumeAfterReload=playing;
+    if(affectsCurrent){pauseInternal(true);playbackReady=false;}
     if(kind){c64Roms[kind]=bytes;}else{c64Roms.basic=null;c64Roms.kernal=null;}
     applyRoms();
     let saved=true;
     try{for(const key of ["basic","kernal"]){if(c64Roms[key])localStorage.setItem("c64-rom-"+key,toBase64(c64Roms[key].buffer));else localStorage.removeItem("c64-rom-"+key);}}catch(_){saved=false;}
-    if(current>=0)await loadSong(current,false,activeSub);
-    if(!saved)status("ROMs loaded for this session; device storage is unavailable.");
+    if(current>=0&&affectsCurrent)await loadSong(current,resumeAfterReload,activeSub);
+    else status(kind?"C64 ROM setting saved. Current song continues.":"C64 ROMs removed. Current song continues.");
+    if(!saved)status("ROMs changed for this session; device storage is unavailable.");
   }catch(e){status(String(e.message||e));}
 }
 for(const kind of ["basic","kernal"]){$(kind+"RomFile").onchange=e=>{const file=e.target.files[0];if(file)changeRoms(kind,file);e.target.value="";};}

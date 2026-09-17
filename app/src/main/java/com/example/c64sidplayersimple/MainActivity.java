@@ -101,7 +101,6 @@ public class MainActivity extends Activity {
             try {
                 byte[] k=android.util.Base64.decode(kernal,android.util.Base64.NO_WRAP);
                 byte[] b=android.util.Base64.decode(basic,android.util.Base64.NO_WRAP);
-                PlaybackService.unloadSid();
                 return NativeSid.nativeSetRoms(k,b);
             } catch(Throwable t){ return false; }
         }

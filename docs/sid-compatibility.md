@@ -63,3 +63,12 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
   `LDX #$00; JMP original_init` wrapper as the earlier affected Bjerregaard tunes.
 - Drop Block: the PAUSED overlay is now plain text on the game screen, without
   the message panel border, background, or shadow frame.
+
+## V4.0.31
+
+- Removing ROMs when none are loaded is a no-op.
+- Adding or removing ROMs no longer pauses, unloads, or reloads a current
+  non-BASIC tune. Native ROM storage changes are deferred until the next safe
+  SID unload/load so libsidplayfp never retains invalid ROM pointers.
+- A current BASIC-dependent tune is still reloaded because its ROM environment
+  genuinely changed; playback resumes automatically when the new ROM set is valid.
