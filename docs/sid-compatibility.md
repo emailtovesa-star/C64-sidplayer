@@ -135,3 +135,10 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
   asynchronous status update overwrites it. It remains visible for the full
   native BASIC initialization period and changes to the playing message only
   after music has been confirmed.
+
+## V4.0.42
+
+- BASIC music detection now tolerates rests shorter than half a second instead
+  of resetting after every quiet render block. Isolated startup sounds still
+  time out, while real music containing normal note gaps changes the status to
+  the playing message.

@@ -5,7 +5,7 @@ let playing=false, generation=0, pcmGeneration=1;
 let sourceBytes=null, currentSong=0;
 let roms={kernal:null,basic:null,chargen:null};
 let songlengths=new Map(), loopOne=false, loopSeconds=null, elapsedFrames=0, channels=2;
-let basicTune=false, audioStarted=true, basicAudioArmed=true, basicQuietFrames=0, basicCandidateFrames=0;
+let basicTune=false, audioStarted=true, basicAudioArmed=true, basicQuietFrames=0, basicCandidateFrames=0, basicCandidateQuietFrames=0;
 
 function post(type, data={}) { self.postMessage({type, ...data}); }
 
@@ -116,6 +116,7 @@ async function makePlayer(bytes,song){
   basicAudioArmed=!basicTune;
   basicQuietFrames=0;
   basicCandidateFrames=0;
+  basicCandidateQuietFrames=0;
   post("duration",{seconds:loopSeconds,md5,sub:s,dbEntries:songlengths.size});
   return s;
 }
@@ -146,12 +147,16 @@ async function renderLoop(gen){
             if(audible)basicQuietFrames=0;
             else if((basicQuietFrames+=pcm.length/channels)>=44100/2)basicAudioArmed=true;
           }else if(audible){
+            basicCandidateQuietFrames=0;
             basicCandidateFrames+=pcm.length/channels;
             if(basicCandidateFrames>=44100*3/4){
               audioStarted=true;
               elapsedFrames=basicCandidateFrames;
             }
-          }else basicCandidateFrames=0;
+          }else if(basicCandidateFrames>0 && (basicCandidateQuietFrames+=pcm.length/channels)>=44100/2){
+            basicCandidateFrames=0;
+            basicCandidateQuietFrames=0;
+          }
         }
         if(audioStarted)elapsedFrames += pcm.length/channels;
         producedMs = (totalSamples/ch/44100)*1000;

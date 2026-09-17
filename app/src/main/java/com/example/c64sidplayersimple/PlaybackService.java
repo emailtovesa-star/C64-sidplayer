@@ -53,6 +53,7 @@ public class PlaybackService extends Service {
     private volatile boolean basicAudioArmed=false;
     private volatile long basicQuietFrames=0;
     private volatile long basicAudibleCandidateFrames=0;
+    private volatile long basicCandidateQuietFrames=0;
     private volatile long basicCandidateStartRenderedFrames=0;
     private final ArrayList<short[]> fastBasicCandidatePcm=new ArrayList<>();
 
@@ -82,6 +83,7 @@ public class PlaybackService extends Service {
         basicAudioArmed=!basicTune;
         basicQuietFrames=0;
         basicAudibleCandidateFrames=0;
+        basicCandidateQuietFrames=0;
         basicCandidateStartRenderedFrames=0;
         fastBasicCandidatePcm.clear();
     }
@@ -478,6 +480,7 @@ public class PlaybackService extends Service {
                                 basicAudioArmed=!basicTune;
                                 basicQuietFrames=0;
                                 basicAudibleCandidateFrames=0;
+                                basicCandidateQuietFrames=0;
                                 basicCandidateStartRenderedFrames=renderedFrames;
                                 fastBasicCandidatePcm.clear();
                             }
@@ -495,6 +498,7 @@ public class PlaybackService extends Service {
                                 if(basicAudibleCandidateFrames==0)
                                     basicCandidateStartRenderedFrames=renderedFrames;
                                 if(fastBasicStartup)fastBasicCandidatePcm.add(pcm);
+                                basicCandidateQuietFrames=0;
                                 basicAudibleCandidateFrames+=pcmFrames;
                                 if(basicAudibleCandidateFrames>=SAMPLE_RATE*3/4){
                                     if(fastBasicStartup){
@@ -506,7 +510,8 @@ public class PlaybackService extends Service {
                                             System.arraycopy(part,0,buffered,position,part.length);
                                             position+=part.length;
                                         }
-                                        long previousCandidateFrames=Math.max(0,basicAudibleCandidateFrames-pcmFrames);
+                                        long bufferedFrames=samples/2;
+                                        long previousCandidateFrames=Math.max(0,bufferedFrames-pcmFrames);
                                         renderedFrames=Math.max(basicInitStartRenderedFrames,renderedFrames-previousCandidateFrames);
                                         pcm=buffered;
                                         audibleStartRenderedFrames=renderedFrames;
@@ -517,9 +522,14 @@ public class PlaybackService extends Service {
                                         basicLeadInFrames+=Math.max(0,basicCandidateStartRenderedFrames-basicInitStartRenderedFrames);
                                     }
                                 }
-                            }else{
-                                basicAudibleCandidateFrames=0;
-                                fastBasicCandidatePcm.clear();
+                            }else if(basicAudibleCandidateFrames>0){
+                                if(fastBasicStartup)fastBasicCandidatePcm.add(pcm);
+                                basicCandidateQuietFrames+=pcmFrames;
+                                if(basicCandidateQuietFrames>=SAMPLE_RATE/2){
+                                    basicAudibleCandidateFrames=0;
+                                    basicCandidateQuietFrames=0;
+                                    fastBasicCandidatePcm.clear();
+                                }
                             }
                             skipSilentBasicPcm=fastBasicStartup&&audibleStartRenderedFrames<0;
                         }

@@ -74,8 +74,12 @@ assert.match(html, /if\(\$\("status"\)\.textContent!=="Initializing BASIC tuneâ€
   "other status updates must not permanently hide BASIC initialization");
 assert.match(service, /basicAudibleCandidateFrames>=SAMPLE_RATE\*3\/4/,
   "brief BASIC startup sounds must not finish initialization");
+assert.match(service, /basicCandidateQuietFrames>=SAMPLE_RATE\/2/,
+  "short musical rests must not reset BASIC music detection");
 assert.match(worker, /basicCandidateFrames>=44100\*3\/4/,
   "worker timing must also require sustained BASIC music");
+assert.match(worker, /basicCandidateQuietFrames\+=pcm\.length\/channels\)>=44100\/2/,
+  "worker BASIC detection must tolerate short musical rests too");
 assert.match(service, /if\(fastBasicStartup\)fastBasicCandidatePcm\.add\(pcm\)/,
   "the verified slow BASIC tune must buffer candidate music while fast-forwarding");
 assert.match(service, /basicAudibleCandidateFrames>=SAMPLE_RATE\*3\/4[\s\S]*?pcm=buffered/,
