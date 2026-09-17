@@ -84,3 +84,9 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - BASIC RSID song timing begins at the first audible SID output instead of at
   the start of the BASIC interpreter. This keeps long BASIC setup routines from
   consuming the HVSC song length and stopping a tune before its first note.
+
+## V4.0.34
+
+- BASIC initialization remains at `0:00` until music is confirmed. The detector
+  waits for the C64 startup click to end and for a quiet initialization period
+  before accepting later SID output as the first note.

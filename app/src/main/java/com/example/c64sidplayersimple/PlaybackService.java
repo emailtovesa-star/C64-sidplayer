@@ -33,6 +33,8 @@ public class PlaybackService extends Service {
     private volatile long audibleStartRenderedFrames=0;
     private volatile long basicInitStartRenderedFrames=0;
     private volatile long basicLeadInFrames=0;
+    private volatile boolean basicAudioArmed=false;
+    private volatile long basicQuietFrames=0;
 
     private volatile String songTitle="C64 SID Player";
     private volatile String composer="UNKNOWN";
@@ -57,6 +59,8 @@ public class PlaybackService extends Service {
         basicLeadInFrames=0;
         basicInitStartRenderedFrames=0;
         audibleStartRenderedFrames=basicTune?-1:0;
+        basicAudioArmed=!basicTune;
+        basicQuietFrames=0;
     }
 
     private static boolean hasAudibleSamples(short[] pcm) {
@@ -196,6 +200,7 @@ public class PlaybackService extends Service {
         try{
             long now=unsignedHead(audioTrack);
             long frames=(now-playedBaseFrames)&0xffffffffL;
+            if(basicTune&&audibleStartRenderedFrames<0)return 0;
             long audibleFrames=basicTune?Math.max(0,frames-basicLeadInFrames):frames;
             long ms=(audibleFrames*1000L)/SAMPLE_RATE;
             if(loopEnabled&&loopLengthMs>0)ms%=loopLengthMs;
@@ -363,13 +368,22 @@ public class PlaybackService extends Service {
                                 try{NativeSid.nativeRestart();}catch(Throwable ignored){}
                                 basicInitStartRenderedFrames=renderedFrames;
                                 audibleStartRenderedFrames=basicTune?-1:renderedFrames;
+                                basicAudioArmed=!basicTune;
+                                basicQuietFrames=0;
                             }
                         }
                         // libsidplayfp engine access must never overlap unload/reload.
                         pcm=NativeSid.nativeRender(2048);
-                        if(basicTune&&audibleStartRenderedFrames<0&&hasAudibleSamples(pcm)){
-                            audibleStartRenderedFrames=renderedFrames;
-                            basicLeadInFrames+=Math.max(0,renderedFrames-basicInitStartRenderedFrames);
+                        if(basicTune&&audibleStartRenderedFrames<0){
+                            final boolean audible=hasAudibleSamples(pcm);
+                            final long pcmFrames=pcm==null?0:pcm.length/2;
+                            if(!basicAudioArmed){
+                                if(audible)basicQuietFrames=0;
+                                else if((basicQuietFrames+=pcmFrames)>=SAMPLE_RATE/2)basicAudioArmed=true;
+                            }else if(audible){
+                                audibleStartRenderedFrames=renderedFrames;
+                                basicLeadInFrames+=Math.max(0,renderedFrames-basicInitStartRenderedFrames);
+                            }
                         }
                     }
                     if(pcm==null||pcm.length==0){Thread.sleep(5);continue;}
