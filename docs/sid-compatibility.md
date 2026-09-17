@@ -90,3 +90,9 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - BASIC initialization remains at `0:00` until music is confirmed. The detector
   waits for the C64 startup click to end and for a quiet initialization period
   before accepting later SID output as the first note.
+
+## V4.0.35
+
+- Mexican Hat Dance is a self-looping BASIC program whose HVSC duration does
+  not include its roughly eleven-second interpreter setup. The external end
+  timer is disabled for this exact tune so its own BASIC loop controls playback.

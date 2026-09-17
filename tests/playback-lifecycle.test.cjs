@@ -85,4 +85,9 @@ assert.equal(searchContext.playlistSearchMatch({
   header:{name:"American Flag",author:"Jeroen Kimmel"}
 }), true, "search must match BASIC in the original filename even when header metadata exists");
 
+assert.match(html, /SELF_LOOPING_BASIC_MD5S=new Set\(\["0af13ccf6895a87619ae7da71da09a0f"\]\)/,
+  "Mexican Hat Dance must bypass the external HVSC end timer");
+assert.match(html, /durationSec=selfLoopingBasic\?null:/,
+  "self-looping BASIC tunes must not be stopped by an external duration");
+
 console.log("Playback lifecycle, BASIC timing, and filename-search regression checks passed.");

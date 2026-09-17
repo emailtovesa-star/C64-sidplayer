@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "V4.0.34";
+  const VERSION = "V4.0.35";
 
   function injectStyles() {
     if (document.getElementById("tvPowerStyles")) return;
@@ -332,7 +332,7 @@
 
   function updateVersion() {
     const title = document.querySelector("title");
-    if (title) title.textContent = "C64 SID Player V4.0.34";
+    if (title) title.textContent = "C64 SID Player V4.0.35";
     const sub = document.querySelector(".sub");
     if (sub) sub.textContent = VERSION;
   }
