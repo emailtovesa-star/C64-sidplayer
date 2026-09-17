@@ -58,6 +58,14 @@ assert.match(service, /basicQuietFrames\+=pcmFrames\)>=SAMPLE_RATE\/2/,
   "native BASIC detection must wait through a quiet startup period");
 assert.match(worker, /basicQuietFrames\+=pcm\.length\/channels\)>=44100\/2/,
   "worker BASIC detection must wait through a quiet startup period");
+assert.match(service, /skipAndSync\(-1,"prev"\)/,
+  "lock-screen PREVIOUS must switch songs inside the native service");
+assert.match(service, /skipAndSync\(1,"next"\)/,
+  "lock-screen NEXT must switch songs inside the native service");
+assert.match(html, /nativePlaylistAdd/,
+  "the WebView playlist must be mirrored for wake-safe native song changes");
+assert.match(html, /adoptNativeSong\(Number\(cmd\.slice\(7\)\)\)/,
+  "the WebView must synchronize after a native lock-screen song change");
 
 const timingContext = {};
 vm.createContext(timingContext);

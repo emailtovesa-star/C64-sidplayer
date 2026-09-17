@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.35</title>
+<title>C64 SID Player V4.0.36</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -152,7 +152,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 <div class="logoZone" aria-label="C64 SID Player">
   <div id="starField" class="starField" aria-hidden="true"></div>
   <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
-  <div class="sub">V4.0.35</div>
+  <div class="sub">V4.0.36</div>
 </div>
 <div class="panel">
 <div class="screen" id="songInfoScreen">
@@ -291,6 +291,27 @@ function android(fn,...args){
   }catch(e){}
   return null;
 }
+let nativePlaylistSyncGeneration=0;
+async function syncNativePlaylist(){
+  if(!nativeAndroid)return;
+  const generation=++nativePlaylistSyncGeneration;
+  android("nativePlaylistClear");
+  for(let i=0;i<queue.length;i++){
+    if(generation!==nativePlaylistSyncGeneration)return;
+    const q=queue[i];
+    let bytes;
+    try{bytes=await ensureBytes(q);}catch(_){continue;}
+    const meta=searchMetadata(q);
+    const count=Math.max(1,(bytes[14]<<8)|bytes[15]);
+    const requested=Math.max(0,(((bytes[16]<<8)|bytes[17])||1)-1);
+    const sub=Math.min(count-1,requested);
+    android("nativePlaylistAdd",toBase64(bytes.slice().buffer),sub,
+      meta?.name||q?.file?.name||"C64 SID Player",meta?.author||"UNKNOWN");
+    if((i&15)===15)await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  if(generation===nativePlaylistSyncGeneration&&current>=0)
+    android("nativePlaylistSetCurrent",current,activeSub);
+}
 const PLAYLIST_DB="c64_sid_player_playlist_v2";
 const PLAYLIST_DB_VERSION=1;
 const PLAYLIST_META_STORE="meta";
@@ -379,6 +400,7 @@ async function savePlaylist(){
 
     db.close();
     status("Playlist saved: "+total+" SID file"+(total===1?"":"s")+".");
+    await syncNativePlaylist();
   }catch(e){
     console.warn("Playlist save failed",e);
     status("Playlist save failed: "+(e&&e.message?e.message:String(e)));
@@ -453,6 +475,7 @@ async function restorePlaylist(){
     if(queue.length){
       status("Restored last playlist: "+queue.length+" SID file"+(queue.length===1?"":"s")+".");
     }
+    await syncNativePlaylist();
   }catch(e){
     console.warn("Playlist restore failed",e);
     status("Playlist restore failed: "+(e&&e.message?e.message:String(e)));
@@ -671,6 +694,7 @@ async function loadSong(i,autoplay=false,subOverride=null){
   const requested=subOverride==null?(((bytes[16]<<8)|bytes[17])||1)-1:subOverride;
   const selectedSub=Math.max(0,Math.min(count-1,requested));
   activeSub=selectedSub;
+  if(nativeAndroid)android("nativePlaylistSetCurrent",i,selectedSub);
   if(nativeAndroid){
     android("startPlaybackService");
     const sidB64=toBase64(bytes.buffer);
@@ -750,7 +774,30 @@ function changeSong(delta){
   loadSong((current+delta+queue.length)%queue.length,true);
 }
 
+async function adoptNativeSong(i){
+  if(i<0||i>=queue.length)return;
+  const q=queue[i],bytes=await ensureBytes(q);
+  current=i;currentBytes=bytes;restartOnNextPlay=false;
+  playbackReady=true;playbackLoadError="";playing=true;
+  durationSec=null;accumulatedPlaySec=0;playStartedAt=performance.now();
+  const count=Math.max(1,(bytes[14]<<8)|bytes[15]);
+  activeSub=Math.max(0,Math.min(count-1,(((bytes[16]<<8)|bytes[17])||1)-1));
+  const meta=searchMetadata(q);
+  $("title").textContent=meta?.name||q.file.name;
+  $("author").textContent="BY "+(meta?.author||"UNKNOWN");
+  $("release").textContent=meta?.release||"RELEASE INFO UNKNOWN";
+  $("duration").textContent="LENGTH: LOADING…";
+  updateTrack();renderList();
+  const loadGeneration=++pcmGeneration;
+  const copy=bytes.slice();
+  worker.postMessage({type:"load",buffer:copy.buffer,song:activeSub,pcmGeneration:loadGeneration},[copy.buffer]);
+  status("Song changed from lock-screen controls.");
+}
+
 window.onNativeMediaCommand=(cmd)=>{
+  if(typeof cmd==="string"&&cmd.startsWith("native:")){
+    adoptNativeSong(Number(cmd.slice(7)));return;
+  }
   if(cmd==="prev"){ changeSong(-1); return; }
   if(cmd==="next"){ changeSong(1); return; }
   if(cmd==="toggle"){ if(playing) pause(); else play(); return; }

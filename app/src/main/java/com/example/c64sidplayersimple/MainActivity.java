@@ -105,6 +105,16 @@ public class MainActivity extends Activity {
             } catch(Throwable t){ return false; }
         }
         @JavascriptInterface public void nativeUnloadSid() { PlaybackService.unloadSid(); }
+        @JavascriptInterface public void nativePlaylistClear() { PlaybackService.clearNativePlaylist(); }
+        @JavascriptInterface public void nativePlaylistAdd(String base64Sid,int subsong,String title,String author) {
+            try{
+                byte[] data=android.util.Base64.decode(base64Sid,android.util.Base64.NO_WRAP);
+                PlaybackService.addNativePlaylistTrack(data,subsong,title,author);
+            }catch(Throwable ignored){}
+        }
+        @JavascriptInterface public void nativePlaylistSetCurrent(int index,int subsong) {
+            PlaybackService.setNativePlaylistIndex(index,subsong);
+        }
         @JavascriptInterface public void nativePlay() { PlaybackService.playNative(); }
         @JavascriptInterface public void nativePause() { PlaybackService.pauseNative(); }
         @JavascriptInterface public void nativeRestart() { PlaybackService.restartNative(); }

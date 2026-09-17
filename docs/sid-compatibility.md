@@ -96,3 +96,9 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - Mexican Hat Dance is a self-looping BASIC program whose HVSC duration does
   not include its roughly eleven-second interpreter setup. The external end
   timer is disabled for this exact tune so its own BASIC loop controls playback.
+
+## V4.0.36
+
+- Lock-screen and notification PREVIOUS/NEXT controls switch songs directly in
+  the foreground playback service. They no longer wait for Android to wake the
+  WebView; the app screen synchronizes to the native selection afterward.

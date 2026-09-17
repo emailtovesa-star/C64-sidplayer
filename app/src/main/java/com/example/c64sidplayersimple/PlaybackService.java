@@ -7,12 +7,28 @@ import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.media.MediaMetadata;
 import android.os.*;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class PlaybackService extends Service {
     private static final String CHANNEL="sid_playback_v422";
     private static final int ID=64, SAMPLE_RATE=44100, CHANNELS=2;
     private static final Object lock=new Object();
+    private static final Object playlistLock=new Object();
+    private static final ArrayList<NativeTrack> nativePlaylist=new ArrayList<>();
+    private static int nativePlaylistIndex=-1;
+
+    private static final class NativeTrack {
+        final byte[] data;
+        final int subsong;
+        final String title;
+        final String author;
+        NativeTrack(byte[] data,int subsong,String title,String author){
+            this.data=data;this.subsong=Math.max(0,subsong);
+            this.title=(title==null||title.trim().isEmpty())?"C64 SID Player":title.trim();
+            this.author=(author==null||author.trim().isEmpty())?"UNKNOWN":author.trim();
+        }
+    }
 
     private static final String ACTION_PREV="com.example.c64sidplayersimple.MEDIA_PREV";
     private static final String ACTION_TOGGLE="com.example.c64sidplayersimple.MEDIA_TOGGLE";
@@ -71,6 +87,64 @@ public class PlaybackService extends Service {
 
     private void sendUiCommand(String cmd){
         try{ MainActivity.dispatchMediaCommand(cmd); }catch(Throwable ignored){}
+    }
+
+    public static void clearNativePlaylist(){
+        synchronized(playlistLock){nativePlaylist.clear();nativePlaylistIndex=-1;}
+    }
+
+    public static void addNativePlaylistTrack(byte[] data,int subsong,String title,String author){
+        if(data==null||data.length==0)return;
+        synchronized(playlistLock){
+            nativePlaylist.add(new NativeTrack(data.clone(),subsong,title,author));
+        }
+    }
+
+    public static void setNativePlaylistIndex(int index,int subsong){
+        synchronized(playlistLock){
+            if(index>=0&&index<nativePlaylist.size()){
+                NativeTrack old=nativePlaylist.get(index);
+                nativePlaylist.set(index,new NativeTrack(old.data,subsong,old.title,old.author));
+                nativePlaylistIndex=index;
+            }
+        }
+    }
+
+    private Integer skipNativeSong(int delta){
+        final NativeTrack track;
+        final int target;
+        synchronized(playlistLock){
+            if(nativePlaylist.isEmpty())return null;
+            int base=nativePlaylistIndex;
+            if(base<0||base>=nativePlaylist.size())base=0;
+            target=(base+delta+nativePlaylist.size())%nativePlaylist.size();
+            track=nativePlaylist.get(target);
+        }
+        synchronized(lock){
+            generation.incrementAndGet();
+            playing=false;
+            try{if(audioTrack!=null){audioTrack.pause();audioTrack.flush();}}catch(Throwable ignored){}
+            boolean ok;
+            try{ok=NativeSid.nativeLoad(SidCompatibility.forPlayback(track.data),track.subsong);}catch(Throwable t){ok=false;}
+            if(!ok)return null;
+            sidLoaded=true;
+            basicTune=isBasicTune(track.data);
+            resetTuneClock();
+            playedBaseFrames=audioTrack!=null?unsignedHead(audioTrack):0;
+            songTitle=track.title;composer=track.author;songDurationMs=0;
+            loopEnabled=false;loopLengthMs=0;
+            playing=true;
+            try{if(audioTrack!=null)audioTrack.play();}catch(Throwable ignored){}
+            updateNotification();
+            lock.notifyAll();
+        }
+        synchronized(playlistLock){nativePlaylistIndex=target;}
+        return target;
+    }
+
+    private void skipAndSync(int delta,String fallback){
+        Integer i=skipNativeSong(delta);
+        sendUiCommand(i==null?fallback:"native:"+i);
     }
 
     public static void unloadSid() {
@@ -234,8 +308,8 @@ public class PlaybackService extends Service {
         try{
             mediaSession=new MediaSession(this,"C64 SID Player");
             mediaSession.setCallback(new MediaSession.Callback(){
-                @Override public void onSkipToPrevious(){ sendUiCommand("prev"); }
-                @Override public void onSkipToNext(){ sendUiCommand("next"); }
+                @Override public void onSkipToPrevious(){ skipAndSync(-1,"prev"); }
+                @Override public void onSkipToNext(){ skipAndSync(1,"next"); }
                 @Override public void onPlay(){ sendUiCommand("toggle"); }
                 @Override public void onPause(){ sendUiCommand("toggle"); }
                 @Override public void onStop(){ sendUiCommand("stop"); }
@@ -328,8 +402,12 @@ public class PlaybackService extends Service {
     }
 
     private void handleCommand(String action){
-        if(ACTION_PREV.equals(action)){sendUiCommand("prev");return;}
-        if(ACTION_NEXT.equals(action)){sendUiCommand("next");return;}
+        if(ACTION_PREV.equals(action)){
+            skipAndSync(-1,"prev");return;
+        }
+        if(ACTION_NEXT.equals(action)){
+            skipAndSync(1,"next");return;
+        }
         if(ACTION_TOGGLE.equals(action)){sendUiCommand("toggle");return;}
         if(ACTION_STOP.equals(action)){sendUiCommand("stop");return;}
     }
