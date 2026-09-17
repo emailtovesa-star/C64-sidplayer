@@ -72,3 +72,9 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
   SID unload/load so libsidplayfp never retains invalid ROM pointers.
 - A current BASIC-dependent tune is still reloaded because its ROM environment
   genuinely changed; playback resumes automatically when the new ROM set is valid.
+
+## V4.0.32
+
+- Playlist search now always checks the original SID filename independently of
+  its internal title and author fields. For example, searching `BASIC` finds
+  `American_Flag_BASIC.sid` even when its PSID/RSID title omits that suffix.

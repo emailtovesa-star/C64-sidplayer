@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const vm = require("node:vm");
 
 const html = fs.readFileSync("app/src/main/assets/index.html", "utf8");
 const service = fs.readFileSync(
@@ -47,4 +48,16 @@ assert.match(changeRomsBody, /if\(affectsCurrent\)\{pauseInternal/,
 assert.doesNotMatch(nativeSetRomsBody, /PlaybackService\.unloadSid/,
   "setting ROMs must not unload the currently playing native SID");
 
-console.log("Playback lifecycle regression checks passed.");
+const searchContext = {
+  playlistSearchQuery: "BASIC",
+  searchMetadata: q => q.header
+};
+vm.createContext(searchContext);
+vm.runInContext(html.match(/function normalizeSearchText\(s\)\{[^\n]+\}/)[0], searchContext);
+vm.runInContext(html.match(/function playlistSearchMatch\(q\)\{[\s\S]*?\n\}/)[0], searchContext);
+assert.equal(searchContext.playlistSearchMatch({
+  file:{name:"American_Flag_BASIC.sid"},
+  header:{name:"American Flag",author:"Jeroen Kimmel"}
+}), true, "search must match BASIC in the original filename even when header metadata exists");
+
+console.log("Playback lifecycle and filename-search regression checks passed.");
