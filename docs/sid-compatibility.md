@@ -177,3 +177,9 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - Turning Loop 1 off during playback finishes the current loop at the next
   song end. Native playback drains the final queued audio without restarting
   another cycle.
+
+
+## V4.0.48
+
+- Initialize the saved Loop 1 button after the UI lookup function is defined.
+  The startup smoke check runs the module bootstrap with both saved settings.

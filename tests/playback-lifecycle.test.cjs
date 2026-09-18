@@ -142,3 +142,19 @@ assert.match(glossyPinkPower, /#f02b9a/, "Song Info power button must use the pi
 assert.doesNotMatch(glossyPinkPower, /#ed1d25/, "old red face color must be removed");
 assert.match(glossyPinkPower, /width:31px[\s\S]*height:31px/, "pink button must preserve its desktop dimensions");
 assert.match(glossyPinkPower, /transform:scale\(\.94\)/, "pink button must preserve its pressed animation");
+
+
+// Run the actual module bootstrap with both saved Loop 1 values. This catches
+// initialization-order errors that leave the whole player frozen at startup.
+const bootstrap = html.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1]
+  .split("let playbackLoadError=")[0];
+assert.ok(bootstrap, "player module bootstrap must exist");
+for (const [saved, expected] of [["1", "LOOP 1: ON"], ["0", "LOOP 1: OFF"]]) {
+  const button = { textContent: "" };
+  vm.runInNewContext(bootstrap, {
+    localStorage: { getItem: key => key === "c64_sid_player_loop_one_v1" ? saved : null },
+    document: { getElementById: id => id === "loopOne" ? button : null },
+    window: {},
+  });
+  assert.equal(button.textContent, expected, "saved Loop 1 must initialize the button");
+}
