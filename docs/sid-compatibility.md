@@ -142,3 +142,10 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
   of resetting after every quiet render block. Isolated startup sounds still
   time out, while real music containing normal note gaps changes the status to
   the playing message.
+
+## V4.0.43
+
+- BASIC music detection no longer requires half a second of silence before it
+  starts listening. Tunes that begin audio immediately can now leave the
+  initializing state. The sustained-audio and quiet-gap rules still reject
+  isolated C64 startup clicks.

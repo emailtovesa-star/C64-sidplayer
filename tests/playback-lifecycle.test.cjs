@@ -54,10 +54,10 @@ assert.match(service, /frames-basicLeadInFrames/,
   "native play time must exclude BASIC interpreter startup");
 assert.match(service, /basicTune&&audibleStartRenderedFrames<0\)return 0/,
   "native BASIC time must stay at zero until music begins");
-assert.match(service, /basicQuietFrames\+=pcmFrames\)>=SAMPLE_RATE\/2/,
-  "native BASIC detection must wait through a quiet startup period");
-assert.match(worker, /basicQuietFrames\+=pcm\.length\/channels\)>=44100\/2/,
-  "worker BASIC detection must wait through a quiet startup period");
+assert.doesNotMatch(service, /basicAudioArmed|basicQuietFrames/,
+  "native BASIC detection must not require silence before listening for music");
+assert.doesNotMatch(worker, /basicAudioArmed|basicQuietFrames/,
+  "worker BASIC detection must not require silence before listening for music");
 assert.match(service, /skipAndSync\(-1,"prev"\)/,
   "lock-screen PREVIOUS must switch songs inside the native service");
 assert.match(service, /skipAndSync\(1,"next"\)/,

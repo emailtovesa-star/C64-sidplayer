@@ -50,8 +50,6 @@ public class PlaybackService extends Service {
     private volatile long audibleStartRenderedFrames=0;
     private volatile long basicInitStartRenderedFrames=0;
     private volatile long basicLeadInFrames=0;
-    private volatile boolean basicAudioArmed=false;
-    private volatile long basicQuietFrames=0;
     private volatile long basicAudibleCandidateFrames=0;
     private volatile long basicCandidateQuietFrames=0;
     private volatile long basicCandidateStartRenderedFrames=0;
@@ -80,8 +78,6 @@ public class PlaybackService extends Service {
         basicLeadInFrames=0;
         basicInitStartRenderedFrames=0;
         audibleStartRenderedFrames=basicTune?-1:0;
-        basicAudioArmed=!basicTune;
-        basicQuietFrames=0;
         basicAudibleCandidateFrames=0;
         basicCandidateQuietFrames=0;
         basicCandidateStartRenderedFrames=0;
@@ -477,8 +473,6 @@ public class PlaybackService extends Service {
                                 try{NativeSid.nativeRestart();}catch(Throwable ignored){}
                                 basicInitStartRenderedFrames=renderedFrames;
                                 audibleStartRenderedFrames=basicTune?-1:renderedFrames;
-                                basicAudioArmed=!basicTune;
-                                basicQuietFrames=0;
                                 basicAudibleCandidateFrames=0;
                                 basicCandidateQuietFrames=0;
                                 basicCandidateStartRenderedFrames=renderedFrames;
@@ -491,10 +485,7 @@ public class PlaybackService extends Service {
                         if(basicTune&&audibleStartRenderedFrames<0){
                             final boolean audible=hasAudibleSamples(pcm);
                             final long pcmFrames=pcm==null?0:pcm.length/2;
-                            if(!basicAudioArmed){
-                                if(audible)basicQuietFrames=0;
-                                else if((basicQuietFrames+=pcmFrames)>=SAMPLE_RATE/2)basicAudioArmed=true;
-                            }else if(audible){
+                            if(audible){
                                 if(basicAudibleCandidateFrames==0)
                                     basicCandidateStartRenderedFrames=renderedFrames;
                                 if(fastBasicStartup)fastBasicCandidatePcm.add(pcm);

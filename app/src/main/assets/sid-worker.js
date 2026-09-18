@@ -5,7 +5,7 @@ let playing=false, generation=0, pcmGeneration=1;
 let sourceBytes=null, currentSong=0;
 let roms={kernal:null,basic:null,chargen:null};
 let songlengths=new Map(), loopOne=false, loopSeconds=null, elapsedFrames=0, channels=2;
-let basicTune=false, audioStarted=true, basicAudioArmed=true, basicQuietFrames=0, basicCandidateFrames=0, basicCandidateQuietFrames=0;
+let basicTune=false, audioStarted=true, basicCandidateFrames=0, basicCandidateQuietFrames=0;
 
 function post(type, data={}) { self.postMessage({type, ...data}); }
 
@@ -113,8 +113,6 @@ async function makePlayer(bytes,song){
   elapsedFrames=0;
   basicTune=isBasicRsid(bytes);
   audioStarted=!basicTune;
-  basicAudioArmed=!basicTune;
-  basicQuietFrames=0;
   basicCandidateFrames=0;
   basicCandidateQuietFrames=0;
   post("duration",{seconds:loopSeconds,md5,sub:s,dbEntries:songlengths.size});
@@ -143,10 +141,7 @@ async function renderLoop(gen){
         totalSamples += pcm.length;
         if(!audioStarted){
           const audible=hasAudiblePcm(pcm);
-          if(!basicAudioArmed){
-            if(audible)basicQuietFrames=0;
-            else if((basicQuietFrames+=pcm.length/channels)>=44100/2)basicAudioArmed=true;
-          }else if(audible){
+          if(audible){
             basicCandidateQuietFrames=0;
             basicCandidateFrames+=pcm.length/channels;
             if(basicCandidateFrames>=44100*3/4){
