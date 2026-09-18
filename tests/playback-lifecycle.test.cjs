@@ -128,3 +128,10 @@ assert.match(html, /durationSec=selfLoopingBasic\?null:/,
   "self-looping BASIC tunes must not be stopped by an external duration");
 
 console.log("Playback lifecycle, BASIC timing, and filename-search regression checks passed.");
+
+
+assert.doesNotMatch(
+  html,
+  /Playing through native Android AudioTrack/,
+  "normal playback must not display the native AudioTrack status text"
+);
