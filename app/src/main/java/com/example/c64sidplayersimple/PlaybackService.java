@@ -43,6 +43,10 @@ public class PlaybackService extends Service {
     private volatile boolean sidLoaded=false;
     private volatile boolean loopEnabled=false;
     private volatile long loopLengthMs=0;
+    // When Loop 1 is switched off during playback, drain this final cycle.
+    private volatile boolean loopOffPending=false;
+    private volatile boolean loopEndRendered=false;
+    private volatile long loopOffTargetFrames=0;
     private volatile long renderedFrames=0;
     private volatile long playedBaseFrames=0;
     private volatile boolean basicTune=false;
@@ -74,6 +78,9 @@ public class PlaybackService extends Service {
     }
 
     private void resetTuneClock() {
+        loopOffPending=false;
+        loopEndRendered=false;
+        loopOffTargetFrames=0;
         renderedFrames=0;
         basicLeadInFrames=0;
         basicInitStartRenderedFrames=0;
@@ -146,6 +153,7 @@ public class PlaybackService extends Service {
             playedBaseFrames=audioTrack!=null?unsignedHead(audioTrack):0;
             songTitle=track.title;composer=track.author;songDurationMs=0;
             loopEnabled=false;loopLengthMs=0;
+            loopOffPending=false;loopEndRendered=false;loopOffTargetFrames=0;
             playing=true;
             try{if(audioTrack!=null)audioTrack.play();}catch(Throwable ignored){}
             updateNotification();
@@ -187,6 +195,8 @@ public class PlaybackService extends Service {
             s.sidLoaded=ok;
             s.basicTune=isBasicTune(data);
             s.fastBasicStartup=SidCompatibility.usesFastBasicStartup(data);
+            s.loopEnabled=false;
+            s.loopLengthMs=0;
             s.resetTuneClock();
             s.playedBaseFrames=s.audioTrack!=null?unsignedHead(s.audioTrack):0;
             s.updateNotification();
@@ -273,9 +283,32 @@ public class PlaybackService extends Service {
 
     public static void setLoop(boolean enabled,long durationMs) {
         PlaybackService s=instance;if(s==null)return;
-        s.loopEnabled=enabled;
-        s.loopLengthMs=Math.max(0,durationMs);
-        if(durationMs>0)s.songDurationMs=durationMs;
+        synchronized(lock){
+            long length=Math.max(0,durationMs);
+            if(!enabled&&s.loopEnabled&&s.playing&&length>0){
+                // The render thread runs ahead of AudioTrack. Pick the next
+                // complete rendered cycle so the audible song is not cut short.
+                if(!s.loopOffPending){
+                    long loopFrames=Math.max(1,length*SAMPLE_RATE/1000L);
+                    long played=0;
+                    if(s.audioTrack!=null){
+                        long frames=(unsignedHead(s.audioTrack)-s.playedBaseFrames)&0xffffffffL;
+                        played=s.basicTune?Math.max(0,frames-s.basicLeadInFrames):frames;
+                    }
+                    long rendered=s.basicTune?Math.max(0,s.renderedFrames-s.basicLeadInFrames):s.renderedFrames;
+                    s.loopOffTargetFrames=(Math.max(played,rendered)/loopFrames+1)*loopFrames;
+                    s.loopOffPending=true;
+                }
+            }else{
+                s.loopEnabled=enabled;
+                s.loopOffPending=false;
+                s.loopEndRendered=false;
+                s.loopOffTargetFrames=0;
+                lock.notifyAll();
+            }
+            s.loopLengthMs=length;
+            if(length>0)s.songDurationMs=length;
+        }
     }
 
     public static long getPlayedMs() {
@@ -291,7 +324,10 @@ public class PlaybackService extends Service {
             if(basicTune&&audibleStartRenderedFrames<0)return 0;
             long audibleFrames=basicTune?Math.max(0,frames-basicLeadInFrames):frames;
             long ms=(audibleFrames*1000L)/SAMPLE_RATE;
-            if(loopEnabled&&loopLengthMs>0)ms%=loopLengthMs;
+            if(loopOffPending&&loopLengthMs>0){
+                if(audibleFrames>=loopOffTargetFrames)return loopLengthMs;
+                ms%=loopLengthMs;
+            }else if(loopEnabled&&loopLengthMs>0)ms%=loopLengthMs;
             if(!loopEnabled&&songDurationMs>0)ms=Math.min(ms,songDurationMs);
             return Math.max(0,ms);
         }catch(Throwable ignored){return 0;}
@@ -467,9 +503,14 @@ public class PlaybackService extends Service {
                     synchronized(lock){
                         if(!serviceRunning||!playing||!sidLoaded)continue;
                         renderGeneration=generation.get();
+                        if(loopEndRendered){lock.wait(50);continue;}
                         if(loopEnabled&&loopLengthMs>0&&audibleStartRenderedFrames>=0){
                             long renderMs=((renderedFrames-audibleStartRenderedFrames)*1000L)/SAMPLE_RATE;
                             if(renderMs>=loopLengthMs){
+                                if(loopOffPending){
+                                    loopEndRendered=true;
+                                    continue;
+                                }
                                 try{NativeSid.nativeRestart();}catch(Throwable ignored){}
                                 basicInitStartRenderedFrames=renderedFrames;
                                 audibleStartRenderedFrames=basicTune?-1:renderedFrames;

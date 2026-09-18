@@ -169,3 +169,11 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - The small glossy circular TV power button in the Song Info corner is pink.
   Its dimensions, position, bevel, highlights, shadows, pressed animation, and
   behavior are unchanged.
+
+
+## V4.0.47
+
+- The Loop 1 choice is stored locally and restored when the app opens again.
+- Turning Loop 1 off during playback finishes the current loop at the next
+  song end. Native playback drains the final queued audio without restarting
+  another cycle.
