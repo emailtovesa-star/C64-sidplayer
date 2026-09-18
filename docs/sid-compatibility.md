@@ -149,3 +149,9 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
   starts listening. Tunes that begin audio immediately can now leave the
   initializing state. The sustained-audio and quiet-gap rules still reject
   isolated C64 startup clicks.
+
+## V4.0.44
+
+- STOP now marks the unloaded native engine as unavailable. Both PLAY and
+  RESTART detect the stopped state and reload the current song and subtune
+  before starting, instead of sending commands to an empty native engine.

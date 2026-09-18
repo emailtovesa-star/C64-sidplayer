@@ -16,9 +16,16 @@ const blockDrop = fs.readFileSync("app/src/main/assets/oldtv-tetris.js", "utf8")
 const worker = fs.readFileSync("app/src/main/assets/sid-worker.js", "utf8");
 
 const stopBody = html.match(/function stop\(\)\{([\s\S]*?)\n\}/)?.[1] || "";
+const playBody = html.match(/async function play\(\)\{([\s\S]*?)\n\}/)?.[1] || "";
+const restartBody = html.match(/\$\("restart"\)\.onclick=async\(\)=>\{([\s\S]*?)\n\};/)?.[1] || "";
 const changeRomsBody = html.match(/async function changeRoms\(kind,file\)\{([\s\S]*?)\n\}/)?.[1] || "";
 const nativeSetRomsBody = bridge.match(/nativeSetRoms\(String kernal, String basic\) \{([\s\S]*?)\n        \}/)?.[1] || "";
 assert.match(stopBody, /nativeUnloadSid/, "STOP must unload without destroying the service");
+assert.match(stopBody, /playbackReady=false/, "STOP must mark the unloaded native engine unavailable");
+assert.ok(playBody.indexOf("if(restartOnNextPlay)")<playBody.indexOf("if(!playbackReady)"),
+  "PLAY must reload a stopped song before checking native readiness");
+assert.match(restartBody, /if\(restartOnNextPlay\)[\s\S]*?await loadSong\(current,true,activeSub\)/,
+  "RESTART must reload a song that STOP unloaded");
 assert.doesNotMatch(
   stopBody,
   /nativeAndroid\)android\("stopPlaybackService"\)/,
