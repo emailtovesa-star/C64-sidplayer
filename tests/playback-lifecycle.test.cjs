@@ -181,8 +181,8 @@ const selectionContext = {
   updateTrack:()=>{},updateCurrentHighlight:()=>{},pauseInternal:()=>{},
   android:()=>{},needsBasicRoms:()=>false,status:()=>{},
   ensureBytes:q=>q.file.name==="First.sid"?
-    new Promise(resolve=>{releaseFirst=()=>resolve(firstBytes);}):Promise.resolve(secondBytes),
-  setTimeout,Uint8Array,performance,
+    new Promise(resolve=>{releaseFirst=()=>resolve(firstBytes);}):Promise.resolve(q.bytes),
+  setTimeout:()=>0,Uint8Array,performance,
 };
 vm.runInNewContext(instantTitle+"\n"+loadSongSource,selectionContext);
 (async()=>{
@@ -194,4 +194,18 @@ vm.runInNewContext(instantTitle+"\n"+loadSongSource,selectionContext);
   await Promise.all([first,second]);
   assert.equal(elements.title.textContent,"Second.sid","old file read must not replace the title");
   assert.equal(sentLoads.filter(m=>m.type==="load").length,1,"only latest SID reaches worker");
+  // A late worker has supplied no q.header for the current three-subtune SID.
+  const bytes=Uint8Array.from({length:124}, (_,i) => i===15?3:i===17?1:0);
+  selectionContext.queue[1].bytes=bytes;
+  selectionContext.queue[1].header=null;
+  selectionContext.current=1;
+  selectionContext.activeSub=0;
+  await selectionContext.changeSub(1);
+  assert.equal(selectionContext.activeSub,1,"SUB > must work without worker metadata");
+  assert.equal(sentLoads.at(-1).song,1,"native load must select the second subtune");
 })().catch(err=>{console.error(err);process.exitCode=1;});
+
+
+const changeSubSource = html.match(/async function changeSub\(delta\)\{[\s\S]*?\n\}/)?.[0];
+assert.ok(changeSubSource, "subtune handler must exist");
+vm.runInNewContext(changeSubSource,selectionContext);

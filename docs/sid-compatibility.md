@@ -191,3 +191,10 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
   worker loads finish. Skipped load replies cannot replace the current title
   or duration. Current-row highlighting avoids rebuilding the whole playlist
   on every song change.
+
+
+## V4.0.50
+
+- Subtune controls read the song count from the selected SID header in memory.
+  Rapid song skipping no longer blocks subtune changes while metadata loads
+  are still queued in the worker.
