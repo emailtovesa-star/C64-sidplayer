@@ -135,3 +135,10 @@ assert.doesNotMatch(
   /Playing through native Android AudioTrack/,
   "normal playback must not display the native AudioTrack status text"
 );
+
+
+const glossyPinkPower = fs.readFileSync("app/src/main/assets/tv-power-glossy-red.js", "utf8");
+assert.match(glossyPinkPower, /#f02b9a/, "Song Info power button must use the pink face color");
+assert.doesNotMatch(glossyPinkPower, /#ed1d25/, "old red face color must be removed");
+assert.match(glossyPinkPower, /width:31px[\s\S]*height:31px/, "pink button must preserve its desktop dimensions");
+assert.match(glossyPinkPower, /transform:scale\(\.94\)/, "pink button must preserve its pressed animation");

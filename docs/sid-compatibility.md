@@ -162,3 +162,10 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 - Normal playback no longer displays “Playing through native Android AudioTrack.”
   The status area is cleared when PLAY starts, when the app returns to the
   foreground, and when BASIC initialization changes to normal playback.
+
+
+## V4.0.46
+
+- The small glossy circular TV power button in the Song Info corner is pink.
+  Its dimensions, position, bevel, highlights, shadows, pressed animation, and
+  behavior are unchanged.
