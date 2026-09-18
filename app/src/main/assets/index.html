@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.48</title>
+<title>C64 SID Player V4.0.49</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -152,7 +152,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 <div class="logoZone" aria-label="C64 SID Player">
   <div id="starField" class="starField" aria-hidden="true"></div>
   <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
-  <div class="sub">V4.0.48</div>
+  <div class="sub">V4.0.49</div>
 </div>
 <div class="panel">
 <div class="screen" id="songInfoScreen">
@@ -217,6 +217,7 @@ let pickerPaused=false, wasPlayingBeforePicker=false, workerReady=false, playlis
 let showingBasicInitialization=false;
 let showFavoritesOnly=false;
 let playlistSearchQuery="";
+const visibleSongRows=new Map();
 const FAVORITES_KEY="c64_sid_player_favorites_v1";
 const BW_MODE_KEY="c64_sid_player_bw_mode_v1";
 const SID_MODEL_KEY="c64_sid_player_sid_model_v1";
@@ -574,6 +575,7 @@ function updateSearchCount(count){
 
 function renderList(){
   $("list").innerHTML="";
+  visibleSongRows.clear();
   const visible=queue.map((q,i)=>({q,i})).filter(x=>
     (!showFavoritesOnly||isFavorite(x.q)) && playlistSearchMatch(x.q)
   );
@@ -588,6 +590,7 @@ function renderList(){
   visible.forEach(({q,i})=>{
     const d=document.createElement("div");
     d.className="item "+(i===current?"current":"");
+    visibleSongRows.set(i,d);
 
     const name=document.createElement("div");
     name.className="itemName";
@@ -610,9 +613,25 @@ function renderList(){
     $("list").appendChild(d);
   });
 }
+function updateCurrentHighlight(previous){
+  visibleSongRows.get(previous)?.classList.remove("current");
+  visibleSongRows.get(current)?.classList.add("current");
+}
 function updateTrack(){
-  const q=queue[current]; if(!q||!q.header)return;
-  $("track").textContent="SUBTUNE "+(activeSub+1)+" / "+Math.max(1,q.header.songs||1);
+  const q=queue[current]; if(!q)return;
+  const bytes=q.bytes;
+  const count=q.header?.songs || (bytes?.length>=16?((bytes[14]<<8)|bytes[15]):1);
+  $("track").textContent="SUBTUNE "+(activeSub+1)+" / "+Math.max(1,count);
+}
+function showSelectedSong(){
+  const q=queue[current]; if(!q)return;
+  const meta=searchMetadata(q);
+  $("title").textContent=meta.name||q.file.name;
+  $("author").textContent="BY "+(meta.author||"UNKNOWN");
+  $("release").textContent=meta.release||"RELEASE INFO UNKNOWN";
+  updateTrack();
+  $("duration").textContent="LENGTH: LOADING…";
+  $("playtime").textContent="TIME: 0:00 / --:--";
 }
 async function ensureBytes(q){
   if(!q.bytes)q.bytes=new Uint8Array(await q.file.arrayBuffer());
@@ -633,17 +652,19 @@ function startWorker(){
       status("reSIDfp worker ready. Native AudioTrack ready.");
       await restorePlaylist();
     }else if(m.type==="loaded"){
+      if(m.pcmGeneration!==pcmGeneration)return;
       const q=queue[current];
       if(q)q.header=m.header;
       activeSub=m.sub||0;
       $("title").textContent=m.header.name||queue[current].file.name;
       $("author").textContent="BY "+(m.header.author||"UNKNOWN");
       $("release").textContent=m.header.release||"RELEASE INFO UNKNOWN";
-      updateTrack(); renderList();
+      updateTrack(); if(playlistSearchQuery.trim())renderList();
       updateAndroidNowPlaying();
       if(!nativeAndroid)playbackReady=true;
       status(playbackLoadError);
     }else if(m.type==="duration"){
+      if(m.pcmGeneration!==pcmGeneration)return;
       const sec=Number(m.seconds);
       const selfLoopingBasic=SELF_LOOPING_BASIC_MD5S.has(String(m.md5||"").toLowerCase());
       durationSec=selfLoopingBasic?null:((Number.isFinite(sec)&&sec>0)?sec:null);
@@ -682,23 +703,35 @@ startWorker();
 
 async function loadSong(i,autoplay=false,subOverride=null){
   if(i<0||i>=queue.length||!workerReady)return;
+  const loadGeneration=++pcmGeneration;
+  const previous=current;
+  current=i;
+  activeSub=subOverride==null?Math.max(0,((((queue[i].bytes?.[16]||0)<<8)|(queue[i].bytes?.[17]||0))||1)-1):subOverride;
+  durationSec=null;
   restartOnNextPlay=false;
   playbackReady=false;playbackLoadError="";
   pauseInternal(true);
   if(nativeAndroid)android("nativeUnloadSid");
-  const loadGeneration=++pcmGeneration;
   android("resetAudioOutput");
-  current=i;
-  const q=queue[i], bytes=await ensureBytes(q);
-  currentBytes=bytes;
-  if(needsBasicRoms(bytes) && (!c64Roms.basic || !c64Roms.kernal)){
-    playbackLoadError="This BASIC SID requires C64 BASIC and KERNAL ROMs. Import both under C64 ROMs.";
-    $("romPanel").open=true;status(playbackLoadError);renderList();return;
+  updateCurrentHighlight(previous);
+  showSelectedSong();
+  const q=queue[i];
+  let bytes;
+  try{bytes=await ensureBytes(q);}catch(e){
+    if(loadGeneration===pcmGeneration)status("Could not read SID: "+String(e.message||e));
+    return;
   }
+  if(loadGeneration!==pcmGeneration)return;
+  currentBytes=bytes;
   const count=Math.max(1,(bytes[14]<<8)|bytes[15]);
   const requested=subOverride==null?(((bytes[16]<<8)|bytes[17])||1)-1:subOverride;
   const selectedSub=Math.max(0,Math.min(count-1,requested));
   activeSub=selectedSub;
+  showSelectedSong();
+  if(needsBasicRoms(bytes) && (!c64Roms.basic || !c64Roms.kernal)){
+    playbackLoadError="This BASIC SID requires C64 BASIC and KERNAL ROMs. Import both under C64 ROMs.";
+    $("romPanel").open=true;status(playbackLoadError);return;
+  }
   if(nativeAndroid)android("nativePlaylistSetCurrent",i,selectedSub);
   if(nativeAndroid){
     android("startPlaybackService");
@@ -708,6 +741,7 @@ async function loadSong(i,autoplay=false,subOverride=null){
     // its onCreate() has not assigned the playback instance yet.
     for(let attempt=0;attempt<16&&loadGeneration===pcmGeneration;attempt++){
       if(attempt)await new Promise(resolve=>setTimeout(resolve,60));
+      if(loadGeneration!==pcmGeneration)return;
       nativeOk=android("nativeLoadSid",sidB64,selectedSub)===true;
       if(nativeOk)break;
     }
@@ -718,7 +752,6 @@ async function loadSong(i,autoplay=false,subOverride=null){
   android("clearPcm");
   const copy=bytes.slice();
   worker.postMessage({type:"load",buffer:copy.buffer,song:selectedSub,pcmGeneration:loadGeneration},[copy.buffer]);
-  renderList();
   if(autoplay){
     // Give the worker a moment to complete load before starting.
     setTimeout(()=>{if(loadGeneration===pcmGeneration)play();},120);
@@ -784,19 +817,21 @@ function changeSong(delta){
 
 async function adoptNativeSong(i){
   if(i<0||i>=queue.length)return;
-  const q=queue[i],bytes=await ensureBytes(q);
-  current=i;currentBytes=bytes;restartOnNextPlay=false;
+  const loadGeneration=++pcmGeneration;
+  const previous=current;
+  const q=queue[i];
+  current=i;currentBytes=q.bytes||null;restartOnNextPlay=false;
   playbackReady=true;playbackLoadError="";playing=true;
   durationSec=null;accumulatedPlaySec=0;playStartedAt=performance.now();
+  activeSub=Math.max(0,((((q.bytes?.[16]||0)<<8)|(q.bytes?.[17]||0))||1)-1);
+  updateCurrentHighlight(previous);
+  showSelectedSong();
+  const bytes=await ensureBytes(q);
+  if(loadGeneration!==pcmGeneration)return;
+  currentBytes=bytes;
   const count=Math.max(1,(bytes[14]<<8)|bytes[15]);
   activeSub=Math.max(0,Math.min(count-1,(((bytes[16]<<8)|bytes[17])||1)-1));
-  const meta=searchMetadata(q);
-  $("title").textContent=meta?.name||q.file.name;
-  $("author").textContent="BY "+(meta?.author||"UNKNOWN");
-  $("release").textContent=meta?.release||"RELEASE INFO UNKNOWN";
-  $("duration").textContent="LENGTH: LOADING…";
-  updateTrack();renderList();
-  const loadGeneration=++pcmGeneration;
+  showSelectedSong();
   const copy=bytes.slice();
   worker.postMessage({type:"load",buffer:copy.buffer,song:activeSub,pcmGeneration:loadGeneration},[copy.buffer]);
   status("Song changed from lock-screen controls.");

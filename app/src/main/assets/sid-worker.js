@@ -73,7 +73,7 @@ async function init(){
 }
 await init();
 
-async function makePlayer(bytes,song){
+async function makePlayer(bytes,song,requestGeneration=pcmGeneration){
   if(player){try{player.delete()}catch(e){} player=null}
 
   const songs=Math.max(1,(bytes[0x0e]<<8)|bytes[0x0f]);
@@ -115,7 +115,7 @@ async function makePlayer(bytes,song){
   audioStarted=!basicTune;
   basicCandidateFrames=0;
   basicCandidateQuietFrames=0;
-  post("duration",{seconds:loopSeconds,md5,sub:s,dbEntries:songlengths.size});
+  post("duration",{seconds:loopSeconds,md5,sub:s,dbEntries:songlengths.size,pcmGeneration:requestGeneration});
   return s;
 }
 
@@ -180,9 +180,10 @@ self.onmessage=async e=>{
       const bytes=new Uint8Array(m.buffer);
       sourceBytes=bytes.slice();
       const header=parseHeader(bytes);
-      const sub=await makePlayer(sourceBytes,m.song??Math.max(0,(header.start||1)-1));
+      const requestGeneration=pcmGeneration;
+      const sub=await makePlayer(sourceBytes,m.song??Math.max(0,(header.start||1)-1),requestGeneration);
       currentSong=sub;
-      post("loaded",{header,sub});
+      post("loaded",{header,sub,pcmGeneration:requestGeneration});
       return;
     }
     if(m.type==="play"){

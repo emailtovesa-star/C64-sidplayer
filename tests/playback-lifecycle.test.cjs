@@ -158,3 +158,40 @@ for (const [saved, expected] of [["1", "LOOP 1: ON"], ["0", "LOOP 1: OFF"]]) {
   });
   assert.equal(button.textContent, expected, "saved Loop 1 must initialize the button");
 }
+
+
+// Exercise two rapid selections with the first file read deliberately delayed.
+// The second title must appear before either load completes, and the older load
+// must not send stale work back to the SID worker.
+const instantTitle = html.match(/function showSelectedSong\(\)\{[\s\S]*?\n\}/)?.[0];
+const loadSongSource = html.match(/async function loadSong\(i,autoplay=false,subOverride=null\)\{[\s\S]*?\n\}/)?.[0];
+assert.ok(instantTitle && loadSongSource, "song selection functions must be present");
+let releaseFirst;
+const firstBytes = Uint8Array.from({length:124}, (_, i) => i===17?1:0);
+const secondBytes = Uint8Array.from({length:124}, (_, i) => i===17?1:0);
+const elements = Object.fromEntries(["title","author","release","track","duration","playtime"].map(id => [id,{textContent:""}]));
+const sentLoads = [];
+const selectionContext = {
+  queue:[{file:{name:"First.sid"},bytes:null},{file:{name:"Second.sid"},bytes:secondBytes}],
+  current:-1,activeSub:0,pcmGeneration:1,workerReady:true,nativeAndroid:false,
+  playing:false,restartOnNextPlay:false,playbackReady:false,playbackLoadError:"",
+  durationSec:null,currentBytes:null,worker:{postMessage:m=>sentLoads.push(m)},
+  $:id=>elements[id],
+  searchMetadata:q=>({name:q.file.name,author:"Composer"}),
+  updateTrack:()=>{},updateCurrentHighlight:()=>{},pauseInternal:()=>{},
+  android:()=>{},needsBasicRoms:()=>false,status:()=>{},
+  ensureBytes:q=>q.file.name==="First.sid"?
+    new Promise(resolve=>{releaseFirst=()=>resolve(firstBytes);}):Promise.resolve(secondBytes),
+  setTimeout,Uint8Array,performance,
+};
+vm.runInNewContext(instantTitle+"\n"+loadSongSource,selectionContext);
+(async()=>{
+  const first=selectionContext.loadSong(0,false);
+  assert.equal(elements.title.textContent,"First.sid");
+  const second=selectionContext.loadSong(1,false);
+  assert.equal(elements.title.textContent,"Second.sid","latest selection must display immediately");
+  releaseFirst();
+  await Promise.all([first,second]);
+  assert.equal(elements.title.textContent,"Second.sid","old file read must not replace the title");
+  assert.equal(sentLoads.filter(m=>m.type==="load").length,1,"only latest SID reaches worker");
+})().catch(err=>{console.error(err);process.exitCode=1;});

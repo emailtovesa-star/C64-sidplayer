@@ -183,3 +183,11 @@ ROM sizes, preservation of original metadata bytes, and native-load failure.
 
 - Initialize the saved Loop 1 button after the UI lookup function is defined.
   The startup smoke check runs the module bootstrap with both saved settings.
+
+
+## V4.0.49
+
+- Song Info shows the selected SID header immediately, before the native and
+  worker loads finish. Skipped load replies cannot replace the current title
+  or duration. Current-row highlighting avoids rebuilding the whole playlist
+  on every song change.
