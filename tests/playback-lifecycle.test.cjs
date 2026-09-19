@@ -209,3 +209,10 @@ vm.runInNewContext(instantTitle+"\n"+loadSongSource,selectionContext);
 const changeSubSource = html.match(/async function changeSub\(delta\)\{[\s\S]*?\n\}/)?.[0];
 assert.ok(changeSubSource, "subtune handler must exist");
 vm.runInNewContext(changeSubSource,selectionContext);
+
+assert.match(html, /release:searchSidText\(bytes,86,32\)/,
+  "release info must be available immediately from the SID header");
+assert.match(html, /if\(nativeAndroid\)workerLoadTimer=setTimeout\(sendWorkerLoad,70\)/,
+  "native rapid skips must debounce obsolete metadata loads");
+assert.ok(worker.indexOf('post("duration"') < worker.indexOf("player=new module.SidPlayerContext()", worker.indexOf("async function makePlayer")),
+  "song length must be posted before playback-player construction");

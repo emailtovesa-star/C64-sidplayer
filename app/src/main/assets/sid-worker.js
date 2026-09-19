@@ -91,6 +91,12 @@ async function makePlayer(bytes,song,requestGeneration=pcmGeneration){
   const md5=(typeof md5ctx.getTuneMd5==="function" ? String(md5ctx.getTuneMd5()||"") : "").trim().toLowerCase();
   try{md5ctx.delete()}catch(e){}
 
+  // Publish length as soon as the canonical MD5 is known. Playback-player
+  // construction is comparatively expensive and should not delay metadata.
+  const lengths=songlengths.get(md5);
+  loopSeconds=(lengths && Number.isFinite(lengths[s])) ? lengths[s] : null;
+  post("duration",{seconds:loopSeconds,md5,sub:s,dbEntries:songlengths.size,pcmGeneration:requestGeneration});
+
   player=new module.SidPlayerContext();
   if(!player.configure(44100,true))throw new Error(player.getLastError());
   if(typeof player.setEmulationConfig==="function"){
@@ -108,14 +114,11 @@ async function makePlayer(bytes,song,requestGeneration=pcmGeneration){
   if(typeof player.reset==="function"&&!player.reset())throw new Error(player.getLastError());
 
   channels=player.getChannels?player.getChannels():2;
-  const lengths=songlengths.get(md5);
-  loopSeconds=(lengths && Number.isFinite(lengths[s])) ? lengths[s] : null;
   elapsedFrames=0;
   basicTune=isBasicRsid(bytes);
   audioStarted=!basicTune;
   basicCandidateFrames=0;
   basicCandidateQuietFrames=0;
-  post("duration",{seconds:loopSeconds,md5,sub:s,dbEntries:songlengths.size,pcmGeneration:requestGeneration});
   return s;
 }
 

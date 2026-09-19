@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.50</title>
+<title>C64 SID Player V4.0.51</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -167,7 +167,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
     <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
     <img class="dxLogo" src="dx_logo.webp" alt="DX">
   </div>
-  <div class="sub">V4.0.50</div>
+  <div class="sub">V4.0.51</div>
 </div>
 <div class="panel">
 <div class="screen" id="songInfoScreen">
@@ -224,7 +224,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 </div>
 
 <script type="module">
-let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, loopOne=false;
+let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, loopOne=false, workerLoadTimer=0;
 let durationSec=null, playStartedAt=0, accumulatedPlaySec=0;
 let restartOnNextPlay=false;
 let audioClockAvailable=false;
@@ -568,7 +568,7 @@ function searchMetadata(q){
   if(bytes&&bytes.length>=118){
     const magic=String.fromCharCode(bytes[0],bytes[1],bytes[2],bytes[3]);
     if(magic==="PSID"||magic==="RSID"){
-      return {name:searchSidText(bytes,22,32)||q?.file?.name||"",author:searchSidText(bytes,54,32)||""};
+      return {name:searchSidText(bytes,22,32)||q?.file?.name||"",author:searchSidText(bytes,54,32)||"",release:searchSidText(bytes,86,32)||""};
     }
   }
   return {name:q?.file?.name||"",author:""};
@@ -645,7 +645,23 @@ function showSelectedSong(){
   $("author").textContent="BY "+(meta.author||"UNKNOWN");
   $("release").textContent=meta.release||"RELEASE INFO UNKNOWN";
   updateTrack();
-  $("duration").textContent="LENGTH: LOADING…";
+  const cachedDuration=q.durationBySub?.[activeSub];
+  if(cachedDuration){
+    const sec=Number(cachedDuration.seconds);
+    const selfLooping=SELF_LOOPING_BASIC_MD5S.has(String(cachedDuration.md5||"").toLowerCase());
+    durationSec=selfLooping?null:((Number.isFinite(sec)&&sec>0)?sec:null);
+    if(selfLooping){
+      $("duration").textContent="LENGTH: SELF-LOOPING BASIC TUNE";
+    }else if(durationSec){
+      const mm=Math.floor(durationSec/60), ss=Math.floor(durationSec%60);
+      $("duration").textContent="LENGTH: "+mm+":"+String(ss).padStart(2,"0")+" · HVSC · SUB "+(activeSub+1);
+    }else{
+      $("duration").textContent="LENGTH: UNKNOWN · HVSC";
+    }
+  }else{
+    durationSec=null;
+    $("duration").textContent="LENGTH: LOADING…";
+  }
   $("playtime").textContent="TIME: 0:00 / --:--";
 }
 async function ensureBytes(q){
@@ -680,6 +696,11 @@ function startWorker(){
       status(playbackLoadError);
     }else if(m.type==="duration"){
       if(m.pcmGeneration!==pcmGeneration)return;
+      const q=queue[current];
+      if(q){
+        if(!q.durationBySub)q.durationBySub={};
+        q.durationBySub[Number(m.sub)||0]={seconds:m.seconds,md5:m.md5||""};
+      }
       const sec=Number(m.seconds);
       const selfLoopingBasic=SELF_LOOPING_BASIC_MD5S.has(String(m.md5||"").toLowerCase());
       durationSec=selfLoopingBasic?null:((Number.isFinite(sec)&&sec>0)?sec:null);
@@ -765,8 +786,17 @@ async function loadSong(i,autoplay=false,subOverride=null){
     playbackReady=true;
   }
   android("clearPcm");
-  const copy=bytes.slice();
-  worker.postMessage({type:"load",buffer:copy.buffer,song:selectedSub,pcmGeneration:loadGeneration},[copy.buffer]);
+  if(workerLoadTimer){clearTimeout(workerLoadTimer);workerLoadTimer=0;}
+  const sendWorkerLoad=()=>{
+    workerLoadTimer=0;
+    if(loadGeneration!==pcmGeneration)return;
+    const copy=bytes.slice();
+    worker.postMessage({type:"load",buffer:copy.buffer,song:selectedSub,pcmGeneration:loadGeneration},[copy.buffer]);
+  };
+  // Native audio is already loaded above. A short debounce keeps rapid skips
+  // from queueing obsolete, expensive WebAssembly metadata initializations.
+  if(nativeAndroid)workerLoadTimer=setTimeout(sendWorkerLoad,70);
+  else sendWorkerLoad();
   if(autoplay){
     // Give the worker a moment to complete load before starting.
     setTimeout(()=>{if(loadGeneration===pcmGeneration)play();},120);
@@ -804,6 +834,7 @@ function pause(){
 }
 function stop(){
   pauseInternal(true);
+  if(workerLoadTimer){clearTimeout(workerLoadTimer);workerLoadTimer=0;}
   if(worker)worker.postMessage({type:"stop"});
   pcmGeneration++;
   // Keep the foreground service alive. Destroying and immediately recreating
