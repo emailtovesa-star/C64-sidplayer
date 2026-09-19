@@ -1,4 +1,6 @@
 name: Build Android APK V4.0 Native SID
+
+# Automatic APK build on every main/master update, plus manual Run workflow support.
 on:
   workflow_dispatch:
   push:
