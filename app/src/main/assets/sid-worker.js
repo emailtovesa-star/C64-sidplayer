@@ -178,6 +178,15 @@ async function renderLoop(gen){
 self.onmessage=async e=>{
   const m=e.data||{};
   try{
+    if(m.type==="durationLookup"){
+      if(Number.isInteger(m.pcmGeneration))pcmGeneration=m.pcmGeneration;
+      const md5=String(m.md5||"").trim().toLowerCase();
+      const sub=Math.max(0,Number(m.song)||0);
+      const lengths=songlengths.get(md5);
+      const seconds=(lengths&&Number.isFinite(lengths[sub]))?lengths[sub]:null;
+      post("duration",{seconds,md5,sub,dbEntries:songlengths.size,pcmGeneration:m.pcmGeneration});
+      return;
+    }
     if(m.type==="load"){
       if (Number.isInteger(m.pcmGeneration)) pcmGeneration=m.pcmGeneration;
       const bytes=new Uint8Array(m.buffer);

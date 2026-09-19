@@ -97,6 +97,13 @@ public class MainActivity extends Activity {
                 return PlaybackService.loadSid(data,subsong);
             } catch(Throwable t){ return false; }
         }
+        @JavascriptInterface public String nativeTuneMd5(String base64Sid) {
+            try {
+                byte[] data=android.util.Base64.decode(base64Sid,android.util.Base64.NO_WRAP);
+                String md5=NativeSid.nativeTuneMd5(data);
+                return md5==null?"":md5;
+            } catch(Throwable t){ return ""; }
+        }
         @JavascriptInterface public boolean nativeSetRoms(String kernal, String basic) {
             try {
                 byte[] k=android.util.Base64.decode(kernal,android.util.Base64.NO_WRAP);

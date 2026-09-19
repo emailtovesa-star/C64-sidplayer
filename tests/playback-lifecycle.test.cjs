@@ -14,6 +14,7 @@ const bridge = fs.readFileSync(
 const tv = fs.readFileSync("app/src/main/assets/tv-power.js", "utf8");
 const blockDrop = fs.readFileSync("app/src/main/assets/oldtv-tetris.js", "utf8");
 const worker = fs.readFileSync("app/src/main/assets/sid-worker.js", "utf8");
+const nsid = fs.readFileSync("app/src/main/java/com/example/c64sidplayersimple/NativeSid.java", "utf8");
 
 const stopBody = html.match(/function stop\(\)\{([\s\S]*?)\n\}/)?.[1] || "";
 const playBody = html.match(/async function play\(\)\{([\s\S]*?)\n\}/)?.[1] || "";
@@ -212,7 +213,16 @@ vm.runInNewContext(changeSubSource,selectionContext);
 
 assert.match(html, /release:searchSidText\(bytes,86,32\)/,
   "release info must be available immediately from the SID header");
-assert.match(html, /if\(nativeAndroid\)workerLoadTimer=setTimeout\(sendWorkerLoad,70\)/,
-  "native rapid skips must debounce obsolete metadata loads");
 assert.ok(worker.indexOf('post("duration"') < worker.indexOf("player=new module.SidPlayerContext()", worker.indexOf("async function makePlayer")),
   "song length must be posted before playback-player construction");
+
+assert.match(nsid, /native String nativeTuneMd5\(byte\[\] sidBytes\)/,
+  "native layer must expose the canonical HVSC tune MD5");
+assert.match(bridge, /String nativeTuneMd5\(String base64Sid\)/,
+  "WebView bridge must expose fast native HVSC MD5 calculation");
+assert.match(worker, /m\.type==="durationLookup"/,
+  "worker must support direct song-length lookup without player initialization");
+assert.match(html, /worker\.postMessage\(\{type:"durationLookup",md5:nativeMd5/,
+  "Android song loads must request a direct duration lookup");
+assert.match(html, /if\(!nativeDurationRequested\)workerLoadTimer=setTimeout\(sendWorkerLoad,70\)/,
+  "expensive WebAssembly loading must be fallback-only on Android");

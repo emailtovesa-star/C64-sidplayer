@@ -44,6 +44,16 @@ static bool rebuildLocked(){
   if(!gPlayer->config(cfg))return false;if(!gPlayer->load(gTune.get()))return false;return true;
  }catch(...){return false;}
 }
+extern "C" JNIEXPORT jstring JNICALL Java_com_example_c64sidplayersimple_NativeSid_nativeTuneMd5(JNIEnv*e,jclass,jbyteArray d){
+ if(!d)return e->NewStringUTF("");jsize n=e->GetArrayLength(d);if(n<=0)return e->NewStringUTF("");
+ std::vector<uint8_t>b((size_t)n);e->GetByteArrayRegion(d,0,n,reinterpret_cast<jbyte*>(b.data()));
+ if(e->ExceptionCheck())return e->NewStringUTF("");
+ try{
+  SidTune tune(b.data(),(uint_least32_t)b.size());if(!tune.getStatus())return e->NewStringUTF("");
+  char digest[SidTune::MD5_LENGTH+1]={0};const char*result=tune.createMD5New(digest);
+  return e->NewStringUTF(result?result:"");
+ }catch(...){return e->NewStringUTF("");}
+}
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_c64sidplayersimple_NativeSid_nativeLoad(JNIEnv*e,jclass,jbyteArray d,jint s){
  if(!d)return JNI_FALSE;jsize n=e->GetArrayLength(d);if(n<=0)return JNI_FALSE;std::vector<uint8_t>b((size_t)n);e->GetByteArrayRegion(d,0,n,reinterpret_cast<jbyte*>(b.data()));
  std::lock_guard<std::mutex>l(gMutex);gSidBytes=std::move(b);gSubsong=(int)s;return rebuildLocked()?JNI_TRUE:JNI_FALSE;}

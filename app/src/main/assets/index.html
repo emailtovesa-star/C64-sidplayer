@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.51</title>
+<title>C64 SID Player V4.0.52</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -167,7 +167,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
     <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
     <img class="dxLogo" src="dx_logo.webp" alt="DX">
   </div>
-  <div class="sub">V4.0.51</div>
+  <div class="sub">V4.0.52</div>
 </div>
 <div class="panel">
 <div class="screen" id="songInfoScreen">
@@ -568,7 +568,13 @@ function searchMetadata(q){
   if(bytes&&bytes.length>=118){
     const magic=String.fromCharCode(bytes[0],bytes[1],bytes[2],bytes[3]);
     if(magic==="PSID"||magic==="RSID"){
-      return {name:searchSidText(bytes,22,32)||q?.file?.name||"",author:searchSidText(bytes,54,32)||"",release:searchSidText(bytes,86,32)||""};
+      return {
+        name:searchSidText(bytes,22,32)||q?.file?.name||"",
+        author:searchSidText(bytes,54,32)||"",
+        release:searchSidText(bytes,86,32)||"",
+        songs:Math.max(1,(bytes[14]<<8)|bytes[15]),
+        start:Math.max(1,(bytes[16]<<8)|bytes[17])
+      };
     }
   }
   return {name:q?.file?.name||"",author:""};
@@ -763,12 +769,14 @@ async function loadSong(i,autoplay=false,subOverride=null){
   const requested=subOverride==null?(((bytes[16]<<8)|bytes[17])||1)-1:subOverride;
   const selectedSub=Math.max(0,Math.min(count-1,requested));
   activeSub=selectedSub;
+  q.header=searchMetadata(q);
   showSelectedSong();
   if(needsBasicRoms(bytes) && (!c64Roms.basic || !c64Roms.kernal)){
     playbackLoadError="This BASIC SID requires C64 BASIC and KERNAL ROMs. Import both under C64 ROMs.";
     $("romPanel").open=true;status(playbackLoadError);return;
   }
   if(nativeAndroid)android("nativePlaylistSetCurrent",i,selectedSub);
+  let nativeDurationRequested=false;
   if(nativeAndroid){
     android("startPlaybackService");
     const sidB64=toBase64(bytes.buffer);
@@ -784,6 +792,13 @@ async function loadSong(i,autoplay=false,subOverride=null){
     if(loadGeneration!==pcmGeneration)return;
     if(!nativeOk){playbackLoadError="Native reSIDfp could not load this SID.";status(playbackLoadError);return;}
     playbackReady=true;
+    // Native libsidplayfp can compute the canonical HVSC key directly from
+    // the original SID bytes, avoiding a full WebAssembly player startup.
+    const nativeMd5=String(android("nativeTuneMd5",sidB64)||"").trim().toLowerCase();
+    if(/^[0-9a-f]{32}$/.test(nativeMd5)){
+      worker.postMessage({type:"durationLookup",md5:nativeMd5,song:selectedSub,pcmGeneration:loadGeneration});
+      nativeDurationRequested=true;
+    }
   }
   android("clearPcm");
   if(workerLoadTimer){clearTimeout(workerLoadTimer);workerLoadTimer=0;}
@@ -795,8 +810,11 @@ async function loadSong(i,autoplay=false,subOverride=null){
   };
   // Native audio is already loaded above. A short debounce keeps rapid skips
   // from queueing obsolete, expensive WebAssembly metadata initializations.
-  if(nativeAndroid)workerLoadTimer=setTimeout(sendWorkerLoad,70);
-  else sendWorkerLoad();
+  if(nativeAndroid){
+    // Normally durationLookup above is all Android needs. Keep the old worker
+    // load only as a compatibility fallback if native MD5 calculation fails.
+    if(!nativeDurationRequested)workerLoadTimer=setTimeout(sendWorkerLoad,70);
+  }else sendWorkerLoad();
   if(autoplay){
     // Give the worker a moment to complete load before starting.
     setTimeout(()=>{if(loadGeneration===pcmGeneration)play();},120);
