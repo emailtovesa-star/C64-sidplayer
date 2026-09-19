@@ -22,11 +22,20 @@ public class MainActivity extends Activity {
     private static volatile MainActivity instance;
     private WebView web;
     private ValueCallback<Uri[]> callback;
+    private volatile boolean appForeground=false;
+    private volatile String pendingNativeSongCommand=null;
 
     public static void dispatchMediaCommand(String command) {
         MainActivity a=instance;
         if(a==null||a.web==null||command==null)return;
         final String safe=command.replace("\\","").replace("\"","");
+        // Lock-screen Previous/Next can arrive much faster than a suspended WebView
+        // can process them. While backgrounded, keep only the newest native song
+        // selection instead of building a long evaluateJavascript backlog.
+        if(!a.appForeground && safe.startsWith("native:")){
+            a.pendingNativeSongCommand=safe;
+            return;
+        }
         a.runOnUiThread(() -> {
             try{
                 a.web.evaluateJavascript(
@@ -147,14 +156,25 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        appForeground=false;
         super.onPause();
         if (web != null) web.evaluateJavascript(
             "window.onAndroidBackground&&window.onAndroidBackground()", null);
     }
     @Override protected void onResume() {
         super.onResume();
-        if (web != null) web.evaluateJavascript(
-            "window.onAndroidForeground&&window.onAndroidForeground()", null);
+        appForeground=true;
+        if (web != null) {
+            web.evaluateJavascript(
+                "window.onAndroidForeground&&window.onAndroidForeground()", null);
+            final String latest=pendingNativeSongCommand;
+            pendingNativeSongCommand=null;
+            if(latest!=null){
+                final String safe=latest.replace("\\","").replace("\"","");
+                web.evaluateJavascript(
+                    "window.onNativeMediaCommand&&window.onNativeMediaCommand(\""+safe+"\")", null);
+            }
+        }
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
