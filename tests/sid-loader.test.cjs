@@ -8,7 +8,7 @@ const ctx={Uint8Array,Math,Number,performance:{now:()=>0},setTimeout:fn=>{fn();r
  nativeAndroid:true,c64Roms:{basic:null,kernal:null},worker:{postMessage:m=>posts.push(m)},
  android:(...a)=>{calls.push(a);return ctx.nativeOk},nativeOk:true,
  toBase64:b=>Buffer.from(b).toString('base64'),ensureBytes:async q=>q.bytes,renderList:()=>{},
- updateCurrentHighlight:()=>{},showSelectedSong:()=>{},
+ updateCurrentHighlight:()=>{},showSelectedSong:()=>{},searchMetadata:q=>({name:q.file?.name||"",author:"",release:""}),
  atob:s=>Buffer.from(s,'base64').toString('binary')};vm.createContext(ctx);
 for(const name of ['decodeRom','needsBasicRoms','loadSong','play']){
  const start=source.indexOf('function '+name+'(');assert(start>=0);let end=source.indexOf('\n}',start)+2;
