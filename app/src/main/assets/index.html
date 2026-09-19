@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>C64 SID Player V4.0.52</title>
+<title>C64 SID Player V4.0.53</title>
 <style>
 :root{--bg:#07071c;--panel:#211d72;--ink:#d9d7ff;--cyan:#69edff;--pink:#ff70c7;--yellow:#ffe36c;--green:#8aff99}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(#18145d,#07071c 48%);color:var(--ink);font-family:monospace;padding:14px;min-height:100vh}
@@ -167,7 +167,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
     <img class="blueLogo" src="c64_blue_logo.png" alt="C64 SID Player">
     <img class="dxLogo" src="dx_logo.webp" alt="DX">
   </div>
-  <div class="sub">V4.0.52</div>
+  <div class="sub">V4.0.53</div>
 </div>
 <div class="panel">
 <div class="screen" id="songInfoScreen">
@@ -224,7 +224,7 @@ html.bwMode{filter:grayscale(1) saturate(0) contrast(1.08)}
 </div>
 
 <script type="module">
-let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, loopOne=false, workerLoadTimer=0;
+let worker=null, queue=[], current=-1, activeSub=0, currentBytes=null, playing=false, pcmGeneration=1, loopOne=false, workerLoadTimer=0, nativeLoadDelay=null;
 let durationSec=null, playStartedAt=0, accumulatedPlaySec=0;
 let restartOnNextPlay=false;
 let audioClockAvailable=false;
@@ -310,6 +310,24 @@ function android(fn,...args){
     if(obj&&typeof obj[fn]==="function") return obj[fn](...args);
   }catch(e){}
   return null;
+}
+function cancelNativeLoadDelay(){
+  const pending=nativeLoadDelay;
+  if(!pending)return;
+  nativeLoadDelay=null;
+  clearTimeout(pending.timer);
+  pending.resolve(false);
+}
+function waitForNativeLoadTurn(generation){
+  cancelNativeLoadDelay();
+  return new Promise(resolve=>{
+    const pending={resolve,timer:0};
+    nativeLoadDelay=pending;
+    pending.timer=setTimeout(()=>{
+      if(nativeLoadDelay===pending)nativeLoadDelay=null;
+      resolve(generation===pcmGeneration);
+    },55);
+  });
 }
 let nativePlaylistSyncGeneration=0;
 async function syncNativePlaylist(){
@@ -753,7 +771,7 @@ async function loadSong(i,autoplay=false,subOverride=null){
   restartOnNextPlay=false;
   playbackReady=false;playbackLoadError="";
   pauseInternal(true);
-  if(nativeAndroid)android("nativeUnloadSid");
+  if(nativeAndroid)android("nativePause");
   android("resetAudioOutput");
   updateCurrentHighlight(previous);
   showSelectedSong();
@@ -775,7 +793,14 @@ async function loadSong(i,autoplay=false,subOverride=null){
     playbackLoadError="This BASIC SID requires C64 BASIC and KERNAL ROMs. Import both under C64 ROMs.";
     $("romPanel").open=true;status(playbackLoadError);return;
   }
-  if(nativeAndroid)android("nativePlaylistSetCurrent",i,selectedSub);
+  if(nativeAndroid){
+    // Do not rebuild libsidplayfp for every tap in a rapid skip burst.
+    // The latest selection wins after one short, imperceptible settling delay.
+    if(!await waitForNativeLoadTurn(loadGeneration))return;
+    if(loadGeneration!==pcmGeneration)return;
+    android("nativeUnloadSid");
+    android("nativePlaylistSetCurrent",i,selectedSub);
+  }
   let nativeDurationRequested=false;
   if(nativeAndroid){
     android("startPlaybackService");
@@ -855,6 +880,7 @@ function stop(){
   if(workerLoadTimer){clearTimeout(workerLoadTimer);workerLoadTimer=0;}
   if(worker)worker.postMessage({type:"stop"});
   pcmGeneration++;
+  cancelNativeLoadDelay();
   // Keep the foreground service alive. Destroying and immediately recreating
   // it caused repeated STOP -> PLAY cycles to race on Android.
   if(nativeAndroid)android("nativeUnloadSid"); else android("stopPlaybackService");

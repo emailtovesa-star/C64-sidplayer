@@ -226,3 +226,10 @@ assert.match(html, /worker\.postMessage\(\{type:"durationLookup",md5:nativeMd5/,
   "Android song loads must request a direct duration lookup");
 assert.match(html, /if\(!nativeDurationRequested\)workerLoadTimer=setTimeout\(sendWorkerLoad,70\)/,
   "expensive WebAssembly loading must be fallback-only on Android");
+
+assert.match(html, /function waitForNativeLoadTurn\(generation\)/,
+  "rapid Android skips must debounce native player rebuilding");
+assert.match(html, /if\(!await waitForNativeLoadTurn\(loadGeneration\)\)return/,
+  "only the latest rapid selection may initialize native playback");
+assert.match(html, /if\(nativeAndroid\)android\("nativePause"\)/,
+  "rapid selection must pause without repeatedly unloading the native engine");

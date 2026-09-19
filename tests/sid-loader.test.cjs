@@ -4,13 +4,13 @@ const elements={};const calls=[];const posts=[];
 const ctx={Uint8Array,Math,Number,performance:{now:()=>0},setTimeout:fn=>{fn();return 0;},clearTimeout:()=>{},
  $:id=>elements[id]||(elements[id]={}),status:s=>ctx.message=s,
  workerReady:true,restartOnNextPlay:false,playbackReady:false,playbackLoadError:'',
- pauseInternal:()=>{},pcmGeneration:0,workerLoadTimer:0,current:-1,currentBytes:null,activeSub:0,
+ pauseInternal:()=>{},pcmGeneration:0,workerLoadTimer:0,nativeLoadDelay:null,current:-1,currentBytes:null,activeSub:0,
  nativeAndroid:true,c64Roms:{basic:null,kernal:null},worker:{postMessage:m=>posts.push(m)},
  android:(...a)=>{calls.push(a);return ctx.nativeOk},nativeOk:true,
  toBase64:b=>Buffer.from(b).toString('base64'),ensureBytes:async q=>q.bytes,renderList:()=>{},
  updateCurrentHighlight:()=>{},showSelectedSong:()=>{},searchMetadata:q=>({name:q.file?.name||"",author:"",release:""}),
  atob:s=>Buffer.from(s,'base64').toString('binary')};vm.createContext(ctx);
-for(const name of ['decodeRom','needsBasicRoms','loadSong','play']){
+for(const name of ['decodeRom','needsBasicRoms','cancelNativeLoadDelay','waitForNativeLoadTurn','loadSong','play']){
  const start=source.indexOf('function '+name+'(');assert(start>=0);let end=source.indexOf('\n}',start)+2;
  vm.runInContext((source.slice(start-6,start)==='async '?'async ':'')+source.slice(start,end),ctx);
 }
