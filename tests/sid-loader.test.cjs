@@ -1,10 +1,10 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const source=fs.readFileSync('app/src/main/assets/index.html','utf8');
 const elements={};const calls=[];const posts=[];
-const ctx={Uint8Array,Math,Number,performance:{now:()=>0},setTimeout:()=>{},
+const ctx={Uint8Array,Math,Number,performance:{now:()=>0},setTimeout:fn=>{fn();return 0;},clearTimeout:()=>{},
  $:id=>elements[id]||(elements[id]={}),status:s=>ctx.message=s,
  workerReady:true,restartOnNextPlay:false,playbackReady:false,playbackLoadError:'',
- pauseInternal:()=>{},pcmGeneration:0,current:-1,currentBytes:null,activeSub:0,
+ pauseInternal:()=>{},pcmGeneration:0,workerLoadTimer:0,current:-1,currentBytes:null,activeSub:0,
  nativeAndroid:true,c64Roms:{basic:null,kernal:null},worker:{postMessage:m=>posts.push(m)},
  android:(...a)=>{calls.push(a);return ctx.nativeOk},nativeOk:true,
  toBase64:b=>Buffer.from(b).toString('base64'),ensureBytes:async q=>q.bytes,renderList:()=>{},
