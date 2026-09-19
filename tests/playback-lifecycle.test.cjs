@@ -175,14 +175,14 @@ const selectionContext = {
   queue:[{file:{name:"First.sid"},bytes:null},{file:{name:"Second.sid"},bytes:secondBytes}],
   current:-1,activeSub:0,pcmGeneration:1,workerReady:true,nativeAndroid:false,
   playing:false,restartOnNextPlay:false,playbackReady:false,playbackLoadError:"",
-  durationSec:null,currentBytes:null,worker:{postMessage:m=>sentLoads.push(m)},
+  durationSec:null,currentBytes:null,workerLoadTimer:0,worker:{postMessage:m=>sentLoads.push(m)},
   $:id=>elements[id],
   searchMetadata:q=>({name:q.file.name,author:"Composer"}),
   updateTrack:()=>{},updateCurrentHighlight:()=>{},pauseInternal:()=>{},
   android:()=>{},needsBasicRoms:()=>false,status:()=>{},
   ensureBytes:q=>q.file.name==="First.sid"?
     new Promise(resolve=>{releaseFirst=()=>resolve(firstBytes);}):Promise.resolve(q.bytes),
-  setTimeout:()=>0,Uint8Array,performance,
+  setTimeout:()=>0,clearTimeout:()=>{},Uint8Array,performance,
 };
 vm.runInNewContext(instantTitle+"\n"+loadSongSource,selectionContext);
 (async()=>{
